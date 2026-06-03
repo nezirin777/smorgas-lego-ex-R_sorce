@@ -1,0 +1,362 @@
+# Chaika スキンスクリプト改良方針
+
+## プロジェクト目的
+
+機能追加は行わない。
+
+主目的は以下。
+
+- 可読性向上
+- 保守性向上
+- 軽量化
+- パフォーマンス改善
+- 現代Firefox向け最適化
+- script.js巨大化問題の解消
+- 将来的な機能追加や不具合修正を容易にする
+
+動作仕様は原則変更しない。
+既存利用者が違和感を覚えるようなUI変更や挙動変更は避ける。
+
+
+# 対象環境
+
+対象
+
+- Firefox 最新版
+- Floorp
+- Zen Browser
+- Waterfox
+
+対象外
+
+- Firefox ESR60以前
+- Firefox 52
+- Pale Moon
+- 古いES5環境
+- トランスパイル前提環境
+
+そのため以下は削除候補。
+
+- 古いブラウザ回避コード
+- Polyfill
+- ES5向け記述
+- Pale Moon対応コード
+- トランスパイル前提コード
+
+
+# 基本方針
+
+## 1. 動作を壊さない
+
+リファクタリング優先。
+
+× 機能追加
+× UI変更
+× 仕様変更
+
+○ 同じ動作で整理
+○ 同じ動作で軽量化
+○ 同じ動作で高速化
+
+
+## 2. namespace方式からClass方式へ移行
+
+現状
+
+var Popup = { ... };
+var Bookmark = { ... };
+var AutoReload = { ... };
+
+目標
+
+class Popup { ... }
+class Bookmark { ... }
+class AutoReload { ... }
+
+一括変換は禁止。
+
+必ず
+
+解析
+↓
+最小修正
+↓
+動作確認
+↓
+Class化
+↓
+動作確認
+
+の順で進める。
+
+
+## 3. script.js分割を最終目標とする
+
+現状
+
+script.js
+（巨大単一ファイル）
+
+最終目標
+
+core/
+thread/
+popup/
+ui/
+util/
+
+など責務別に分離。
+
+ただし初期段階では分割しない。
+
+まず内部整理を優先する。
+
+
+# Class化ルール
+
+## 状態を持つモジュール
+
+現状
+
+var Bookmark = {
+    _data: {},
+    save(){},
+    load(){}
+};
+
+↓
+
+class Bookmark {
+
+    constructor(){
+        this._data = {};
+    }
+
+    save(){}
+
+    load(){}
+}
+
+const bookmark = new Bookmark();
+
+
+## 状態を持たないモジュール
+
+現状
+
+var UrlUtil = {
+    normalize(){},
+    encode(){}
+};
+
+↓
+
+class UrlUtil {
+
+    static normalize(){}
+
+    static encode(){}
+
+}
+
+
+## thisの利用を明確化
+
+曖昧な外部参照は避ける。
+
+例
+
+Popup._timer
+
+↓
+
+this.timer
+
+
+# 改良優先順位
+
+## Phase1 安全な整理
+
+対象
+
+- const/let化
+- 未使用変数削除
+- 未使用関数削除
+- 重複処理削除
+- 古い互換コード削除
+
+期待効果
+
+- 可読性向上
+- サイズ削減
+
+
+## Phase2 DOM整理
+
+対象
+
+- querySelector重複削減
+- DOM取得共通化
+- Nodeキャッシュ整理
+- イベント委譲整理
+
+期待効果
+
+- パフォーマンス改善
+- 保守性向上
+
+TODOにも記載されている、
+
+「_doc全体検索ではなく #content を起点にする」
+
+という方向も検討する。
+
+
+## Phase3 小規模Class化
+
+優先順位
+
+1. AjaxGet
+2. StyleSheet
+3. 小規模ユーティリティ群
+
+ここでClass化の作業手順を固める。
+
+
+## Phase4 Popup系整理
+
+対象
+
+- Popup
+- ResPopup
+- IDPopup
+- NamePopup
+- TrackbackPopup
+- UrlPopup
+- ImagePopup
+- VideoPopup
+
+共通処理を抽出し、
+
+class PopupBase
+
+を導入する。
+
+
+## Phase5 UI系Class化
+
+対象
+
+- Bookmark
+- Digest
+- AutoReload
+- AutoScroll
+- FindBox
+- PageScroller
+
+など
+
+
+## Phase6 Thread系整理
+
+対象
+
+- ThreadDocument
+- Name
+- ID
+- Trackback
+- ResImage
+- ResNumber
+
+依存関係が多いため後回し。
+
+
+## Phase7 基盤Class化
+
+対象
+
+- Nodes
+- ResNodes
+
+全体への影響が大きいため最後に行う。
+
+ここでDOMアクセス整理も合わせて実施。
+
+
+## Phase8 ファイル分割
+
+例
+
+core/
+├ AjaxGet.js
+├ StyleSheet.js
+
+popup/
+├ PopupBase.js
+├ ResPopup.js
+├ UrlPopup.js
+
+ui/
+├ Bookmark.js
+├ AutoReload.js
+
+thread/
+├ ThreadDocument.js
+├ Name.js
+
+util/
+├ Clipboard.js
+├ ReplaceStr.js
+
+分割のみで動作変更は行わない。
+
+
+# 作業ルール
+
+毎回必ず以下の順で進める。
+
+1. 現状コード解析
+2. 責務整理
+3. 問題点列挙
+4. 最小修正版提示
+5. 差分説明
+6. 動作確認
+7. Class化案提示
+8. 差分説明
+9. 動作確認
+
+いきなり全面書き換えは禁止。
+
+
+# コードレビュー時の重点確認項目
+
+- 古いFirefox向け処理
+- Pale Moon向け処理
+- 無駄なDOM検索
+- 重複イベント登録
+- setTimeout乱用
+- querySelectorAll乱用
+- グローバル依存
+- namespace肥大化
+- 責務混在
+- 使われていない設定値
+- 使われていない関数
+
+
+# 現時点での着手順
+
+script.jsを上から順に進める。
+
+対象順
+
+1. AjaxGet
+2. StyleSheet
+3. 小規模ユーティリティ
+4. Popup系
+5. UI系
+6. Thread系
+7. Nodes
+8. ResNodes
+9. ファイル分割
+
+以降、この方針に従って進める。

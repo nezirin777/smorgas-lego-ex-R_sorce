@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="Shift_JIS">
+<title>niconico douga</title>
+<script type="application/javascript">
+	if(location.href.match(/.+\?url=(.+)/)){
+		var url = RegExp.$1;
+		window.addEventListener("resize", e => {
+			const embed = document.getElementsByTagName("embed");
+			if(!!embed){
+				const element = document.documentElement;
+				const style = embed[0].style;
+				style.width = element.clientWidth + "px";
+				style.height = element.clientHeight + "px";
+			}
+		}, false);
+	}
+</script>
+</head>
+<body style="margin:0;">
+<script type="application/javascript">
+	if(!!url) document.write('<script type="application/javascript" src="' + url + '"></scrip'+'t>');
+</script>
+</body>
+</html>

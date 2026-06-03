@@ -1,0 +1,232 @@
+;------------------------------------------------------------------------------
+; ReplaceStr.txt サンプル
+; http://janestyle.s11.xrea.com/help/first/ReplaceStr.html
+; (bbs2chreader の HTML 出力に合わせて若干改変)
+;
+; ■ オリジナルの仕様との違い
+; ・文字コードは「UTF-8」、改行コードは「CR+LF」でなければなりません
+; ・「置換対象」に「all」はありません
+; 　また ID は「date」に含まれませんので「id」と指定して下さい
+;
+;------------------------------------------------------------------------------
+;
+; ※本ファイルの内容を更新したら、オプションダイアログで
+; 　「ReplaceStr.txt を使う」にチェックを入れた状態で
+; 　OK ボタンを押して設定を反映をさせて下さい
+;
+; ※右クリックで手動置換しかしない場合でも、一度上記手順で
+; 　設定を反映させておかないと置換は行われません
+;
+; ※正規表現の記述を間違えると(括弧の対応がおかしいなど)
+; 　OK ボタンを押すと、エラーが表示されます
+;
+; ※評価・置換は上から順に行われますので
+; 　　smorgas の置換定義行
+; 　　smorgasbord の置換定義行
+; 　という順で記述すると、意図しない結果になってしまいます
+; 　ご注意下さい
+;
+; ※「date」の置換をして日付の表記を変更すると、以下の機能が
+; 　正しく動作しませんのでご注意下さい
+; 　・スレッド情報の概要
+;------------------------------------------------------------------------------
+
+//■使用例
+//▽投稿端末を表示
+;<rx2>^(ID:(?:.{8}|\?{3})0|(?: 0$))	$1 (PC)	id
+;<rx2>^(ID:(?:.{8}|\?{3})O|(?: O$))	$1 (携帯)	id
+;
+; ※個別に置換を繰り返した時に重複しないように改変
+; ※従来のダミーコメント方式(ID の前に何か追加するパターン全て)だと
+; 　ID を右クリックすると ID だけ選択される機能が効かなくなります
+; ※スタイルファイル(CSS)で ID 判定用の定義を追加している場合は
+; 　端末種別が二重に表示されてしまいますのでご注意下さい
+; 　http://pc11.2ch.net/test/read.cgi/software/1211120946/653
+; ※基本的に ID 欄の内容を改変は、ID の発言回数表示機能との相性が
+; 　悪いですので、併用される場合は予めご留意下さい
+;
+<rx2>^ID:((?:.{8}|\?{3})0(\(\d+\))?$)	ID:$1 (PC)	id
+<rx2>^ID:((?:.{8}|\?{3})O(\(\d+\))?$)	ID:$1 (携帯)	id
+<rx2>^ID:((?:.{8}|\?{3})o(\(\d+\))?$)	ID:$1 (エアーエッジ)	id
+<rx2>^ID:((?:.{8}|\?{3})P(\(\d+\))?$)	ID:$1 (P2)	id
+<rx2>^ID:((?:.{8}|\?{3})Q(\(\d+\))?$)	ID:$1 (フルブラウザ)	id
+;
+; ※ID が「ID:」なしで 0 とか O と date 部に出る板があるので
+; 　別途対応の記述を追加
+; 　http://pc11.2ch.net/test/read.cgi/software/1211120946/643
+<rx2>( 0)$	$1 (PC)	date
+<rx2>( O)$	$1 (携帯)	date
+;
+//▽2行以上の空行は1行に省略する
+//※但しいきなり連続した空行で始まる場合は先頭の空行が残ります
+<rx2><br>(?:[ 　]*<br>){2,}	<br><font color=gray><i>空行略</i></font><br>	msg
+//▽引用行を着色する
+<rx2>((?:^|<br>)[ 　]*)((?:＞|\&gt;)[^<]+)	$1<font color=green><i>$2</i></font>	msg
+//▽投稿日を漢字表記にする
+;スレッド情報が正しく動作しなくなるので削除
+;<rx2>^(\d{2}(?:\d{2})?)\/(\d{2})\/(\d{2})	$1年$2月$3日	date
+//▽トリップを赤色にする
+<rx2>(◆.{10})	<font color=red>$1</font>	name
+
+;------------------------------------------------------------------------------
+; 「bbs2chreaderスキンスレッド」向けサンプル
+;------------------------------------------------------------------------------
+<rx>(?:smorgas(?:bord)?\-)?lego\-ex	<b>本スキン</b>	msg	<0>/software/
+<ex>smorgasbord	<b>本家スキン</b>	msg	<0>/software/
+<ex>smorgas	<b>本家スキン</b>	msg	<0>
+<ex>smörgåsbord	<b>本家スキン(正式名称)</b>	msg	<0>/software/
+bbs2chreader	<b>b2r</b>	msg	<0>/software/
+<ex>スキン	<font color=blue>スキン</font>	msg	<0>スキン
+<ex>人柱	<u>不具合があっても動じない人</u>	msg	<0>スキン
+
+;------------------------------------------------------------------------------
+; 再置換で元に戻すための工夫とか
+; 例："ReplaceStr.txt" ⇔ "置換定義ファイル"
+;------------------------------------------------------------------------------
+<rx2>([^_])(ReplaceStr.txt)	$1<!--rs0_$2_--><b>置換定義ファイル</b><!--/rs0-->	msg	<0>/software/
+<rx2><!--rs_(.+?)_-->.+?<!--/rs-->	$1	msg	<0>/software/
+<!--rs0	<!--rs	msg	<0>/software/
+/rs0-->	/rs-->	msg	<0>/software/
+
+;------------------------------------------------------------------------------
+; 「<n>対象URL/タイトル」部のチェック用サンプル
+; http://jane.s28.xrea.com/test/read.cgi/bbs/1198867514/612
+;------------------------------------------------------------------------------
+//▽地域表示
+<ex2>(まりもっこり)	(まりもっこり：北海道)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(りんご)	(りんご：青森県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(わんこそば)	(わんこそば：岩手県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(きりたんぽ)	(きりたんぽ：秋田県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(ささかまぼこ)	(ささかまぼこ：宮城県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(さくらんぼ)	(さくらんぼ：山形県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(もも)	(もも：福島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(なっとう)	(なっとう：茨城県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(ぎょうざ)	(ぎょうざ：栃木県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(こんにゃく)	(こんにゃく：群馬県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(しまむら)	(しまむら：埼玉県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(らっかせい)	(らっかせい：千葉県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(もんじゃ)	(もんじゃ：東京都)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(しうまい)	(しうまい：神奈川県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(おにぎり)	(おにぎり：新潟県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(ぶり)	(ぶり：富山県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(かぶらずし)	(かぶらずし：石川県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(らっきょう)	(らっきょう：福井県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(ほうとう)	(ほうとう：山梨県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(そば)	(そば：長野県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(あゆ)	(あゆ：岐阜県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(はんぺん)	(はんぺん：静岡県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(味噌カツ)	(味噌カツ：愛知県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(あかふく)	(あかふく：三重県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(鮒寿司)	(鮒寿司：滋賀県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(おたべ)	(おたべ：京都府)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(たこやき)	(たこやき：大阪府)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(おいしい水)	(おいしい水：兵庫県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(しか)	(しか：奈良県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(うめぼし)	(うめぼし：和歌山県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(なし)	(なし：鳥取県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(どろえび)	(どろえび：島根県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(きびだんご)	(きびだんご：岡山県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(もみじ饅頭)	(もみじ饅頭：広島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(ふく)	(ふく：山口県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(すだち)	(すだち：徳島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(うどん)	(うどん：香川県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(みかん)	(みかん：愛媛県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(かつお)	(かつお：高知県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(あら)	(あら：福岡県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(とうふ)	(とうふ：佐賀県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(ちゃんぽん)	(ちゃんぽん：長崎県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(馬刺し)	(馬刺し：熊本県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(カボス)	(カボス：大分県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(そのまんま)	(そのまんま：宮崎県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(黒酢)	(黒酢：鹿児島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(泡盛)	(泡盛：沖縄県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(キムチ)	(キムチ：不明なsoftbank)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(遼寧省)	(遼寧省：softbank携帯)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(石油)	(石油：au携帯)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(おれんじ)	(おれんじ：dion軍)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(甘粛省)	(甘粛省：DoCoMo携帯)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(湖北省)	(湖北省：DION,朝日,wakwak等)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(平湖)	(平湖：西日本)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(春暁)	(春暁：東日本)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(淮河)	(淮河：関西地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(長江)	(長江：関東地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(大酒)	(大酒：長屋)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(プーアル茶)	(プーアル茶：catv？)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(蜘蛛)	(蜘蛛：ダイヤルアップ)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(ミャオ族)	(ミャオ族：中国四国)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(松花江)	(松花江：四国地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(海河)	(海河：中国地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(チワン族)	(チワン族：山陰地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(わたあめ)	(わたあめ：携帯端末（PHS）)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(珠河)	(珠河：中部地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(回族)	(回族：北陸地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(酢豚)	(酢豚：未対応のISP)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(チリ)	(チリ：未対応のISP)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(USA)	(USA:アメリカ)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(加)	(加:カナダ)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(豪)	(豪:オーストラリア)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+;------------------------------------------------------------------------------
+;▽地域表示
+;http://pc11.2ch.net/test/read.cgi/software/1211120946/221
+;------------------------------------------------------------------------------
+<ex2>(福岡県)	(福岡県：北海道)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(香川県)	(香川県：青森県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(群馬県)	(群馬県：岩手県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(沖縄県)	(沖縄県：秋田県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(宮城県)	(宮城県：宮城県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(宮崎県)	(宮崎県：山形県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(佐賀県)	(佐賀県：福島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(茨城県)	(茨城県：茨城県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(高知県)	(高知県：栃木県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(岡山県)	(岡山県：群馬県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(大阪府)	(大阪府：埼玉県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(秋田県)	(秋田県：千葉県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(埼玉県)	(埼玉県：東京都)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(愛知県)	(愛知県：神奈川県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(新潟県)	(新潟県：新潟県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(大分県)	(大分県：富山県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(鹿児島県)	(鹿児島県：石川県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(静岡県)	(静岡県：福井県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(長崎県)	(長崎県：山梨県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(長野県)	(長野県：長野県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(愛媛県)	(愛媛県：岐阜県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(鳥取県)	(鳥取県：静岡県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(神奈川県)	(神奈川県：愛知県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(三重県)	(三重県：三重県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(兵庫県)	(兵庫県：滋賀県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(京都府)	(京都府：京都府)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(東京都)	(東京都：大阪府)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(滋賀県)	(滋賀県：兵庫県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(奈良県)	(奈良県：奈良県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(和歌山県)	(和歌山県：和歌山県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(島根県)	(島根県：鳥取県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(熊本県)	(熊本県：島根県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(山形県)	(山形県：岡山県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(石川県)	(石川県：広島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(富山県)	(富山県：山口県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(徳島県)	(徳島県：徳島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(千葉県)	(千葉県：香川県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(福井県)	(福井県：愛媛県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(岐阜県)	(岐阜県：高知県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(福島県)	(福島県：福岡県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(北海道)	(北海道：佐賀県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(山梨県)	(山梨県：長崎県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(山口県)	(山口県：熊本県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(岩手県)	(岩手県：大分県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(広島県)	(広島県：宮崎県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(栃木県)	(栃木県：鹿児島県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(青森県)	(青森県：沖縄県)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(会津)	(会津：不明なsoftbank)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(久留米)	(久留米：dion軍)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(横浜)	(横浜：au携帯、DoCoMo携帯)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(東日本)	(東日本：西日本)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(東北地方)	(東北地方：東日本)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(中部地方)	(中部地方：関東地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(四国地方)	(四国地方：関西地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(関西地方)	(関西地方：中部地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(九州地方)	(九州地方：中国地方)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(讃岐)	(讃岐：catv？)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+<ex2>(巣鴨)	(巣鴨：アラバマ)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+//<ex2>(長屋)	(長屋：長屋)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+//<ex2>(空)	(空：空)	name	<4>\/(news|eq|eqplus|namazuplus)\/
+//<ex2>(コネチカット州)	(コネチカット州：コネチカット州)	name	<4>\/(news|eq|eqplus|namazuplus)\/

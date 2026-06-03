@@ -1,0 +1,23 @@
+{
+	"tags": {
+		"allowUnknownTags": true,
+		"dictionaries": ["jsdoc"]
+	},
+	"opts": {
+		"destination": "./doc"
+	},
+	"plugins": [ "plugins/markdown" ],
+	"source": {
+		"includePattern": ".+\\.js(doc)?$",
+		"excludePattern": "(^|\\/|\\\\)_"
+	},
+	"templates": {
+		"applicationName": "smorgas-lego-ex-R",
+		"cleverLinks": false,
+		"linenums": true,
+		"default": {
+			"outputSourceFiles": true
+		}
+	}
+}
+

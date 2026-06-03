@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<head>
+<meta charset="SHIFT_JIS">
+<title>ime.nu.html</title>
+<html>
+<script type="application/javascript">
+	if(location.href.match(/\?url=.*?&b64url=/)){
+		var url = atob(RegExp.rightContext);
+	}else if(location.href.match(/\?url=/)){
+		var url = RegExp.rightContext;
+	}
+	document.open();
+	document.write('<meta http-equiv="refresh" content="0;url=' + url + '">');
+	document.close();
+</script>
+</html>

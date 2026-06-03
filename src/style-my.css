@@ -1,0 +1,30 @@
+/*
+ * 追加スタイル定義ファイル
+ *
+ * 　オプションダイアログで選択する表示スタイル(固定スタイルシート)
+ * 　と共に読み込まれ適用されます
+ *
+ * 　独自の追加スタイルを自由に追記してください
+ */
+/* 掲示板でヘッダ・フッダを色変えする例 */
+/*
+body[host*=".2ch.sc"] #header 			{ background-color: #fa8072; }
+body[host*=".2ch.sc"] #command 			{ background-color: #fa8072; }
+body[host*=".2ch.sc"] #footer 			{ background-color: #fa8072; }
+
+body[host*=".shitaraba.net"] #header 	{ background-color: #2834a6; }
+body[host*=".shitaraba.net"] #command 	{ background-color: #2834a6; }
+body[host*=".shitaraba.net"] #footer 	{ background-color: #2834a6; }
+
+body[host*=".open2ch.net"] #header 		{ background-color: #cd853f; }
+body[host*=".open2ch.net"] #command 	{ background-color: #cd853f; }
+body[host*=".open2ch.net"] #footer 		{ background-color: #cd853f; }
+
+body[host="blogban.net"] #header 		{ background-color: #87ceeb; }
+body[host="blogban.net"] #command 		{ background-color: #87ceeb; }
+body[host="blogban.net"] #footer 		{ background-color: #87ceeb; }
+
+body[host="next2ch.net"] #header 		{ background-color: #666666; }
+body[host="next2ch.net"] #command 		{ background-color: #666666; }
+body[host="next2ch.net"] #footer 		{ background-color: #666666; }
+*/

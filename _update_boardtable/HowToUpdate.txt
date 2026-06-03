@@ -1,0 +1,25 @@
+■ 板名の登録を自分で更新する手順
+
+chaikaデータフォルダ直下に bbsmenu.xml ファイルが生成されていれば、
+それを元に _boardTable の定義を容易に作成することが出来ます。
+
+(1) bbsmenu.xml をこのフォルダ（すなわち parse-bbsmenu.xsl ファイルと同じ場所）にコピーする。
+
+(2) コピーした bbsmenu.xml の先頭に下記2行を付け加える。
+
+<?xml version="1.0" ?>
+<?xml-stylesheet type="text/xsl" href="parse-bbsmenu.xsl"?>
+
+(3) 書き換えて保存した後の bbsmenu.xml をブラウザで開く。
+
+(4) 表示された内容を全て選択してコピーする。
+
+(5) boardtable.js の最初の方にある
+
+nameTbl: {
+...
+},
+　　となっている範囲に上書きペーストする。
+
+(6) 掲示板以外の通常ページなど不必要な行は削除する。
+
