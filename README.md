@@ -1,21 +1,14 @@
-# smorgas-lego-ex-R 2018/05/22版
+# smorgas-lego-ex-R 改
 --------------------------------------------------------------------------------
 
-本スキンは、smorgas lego-ex 2012/06/05版（724.zip）をベースにした派生スキンです。
+本スキンは、smorgas lego-ex 2012/06/05版（724.zip）をベースにした派生スキンsmorgas-lego-ex-Rを
+さらにベースにした改良スキンです
+
 
 
 ## 動作要件
 
-* Firefox 52以降、またはそれに相当する派生ブラウザ。
-* **Pale Moon 27 は初期状態では動作しません。** 同梱のビルド環境で Firefox 28 向けにスクリプトを変換（トランスパイル）する必要があります。
 
-
-## 2018/05/22版での変更について
-
-* bbs2chreader ex のサポートは廃止しました。
-* Firefox ESR60 に対応し、動作要件を Firefox 52以降に引き上げました。
-* 5ch.net に対応しました。
-* 詳細は [CHANGELOG.md](CHANGELOG.md) をお読みください。
 
 ## ファイル説明
 
@@ -94,30 +87,30 @@
 1. まず Node.js環境が必要になりますのでインスールを行います。
 	* Windows環境の場合は、[https://nodejs.org/ja/](https://nodejs.org/ja/) から LTS版のインストーラーをダウンロードし、インストーラーに従って進めるだけで問題ないはずです。
 	* Ubuntu系Linux や Mac環境の場合は、下記を参考にしてみてください。
-		- [Ubuntuに最新のNode.jsを難なくインストールする - Qiita](http://qiita.com/seibe/items/36cef7df85fe2cefa3ea) 
-		- [Macにnode.jsをインストールする手順。 - Qiita](http://qiita.com/akakuro43/items/600e7e4695588ab2958d) 
+		- [Ubuntuに最新のNode.jsを難なくインストールする - Qiita](http://qiita.com/seibe/items/36cef7df85fe2cefa3ea)
+		- [Macにnode.jsをインストールする手順。 - Qiita](http://qiita.com/akakuro43/items/600e7e4695588ab2958d)
 
-2. ターミナルを起動してこのスキンのフォルダに移動してください。  
-	* Windows環境の場合は、`Node.js command prompt` というショートカットが出来ているはずですので、それによりコマンドプロンプトを起動してください。  
+2. ターミナルを起動してこのスキンのフォルダに移動してください。
+	* Windows環境の場合は、`Node.js command prompt` というショートカットが出来ているはずですので、それによりコマンドプロンプトを起動してください。
 	* 以降の作業はこのコマンドプロントやターミナルで行います。
 
 3. 下記のコマンドを実行すると、必要なパッケージをダウンロードしてインストールします。
 	```
 	npm install
-	```    
+	```
 	* プロキシでネット接続している環境では npm にプロキシの設定が必要になります。
-		- [proxy環境下でのnpm config設定 - Qiita](http://qiita.com/tenten0213/items/7ca15ce8b54acc3b5719) 
+		- [proxy環境下でのnpm config設定 - Qiita](http://qiita.com/tenten0213/items/7ca15ce8b54acc3b5719)
 
 ### ビルド手順
 
 1. js/cssのカスタマイズ、板名テーブルの更新、スタイル追加などを `./src` フォルダで行います。
 
-2. 下記コマンドで、jsスクリプトのチェックを行います。  
+2. 下記コマンドで、jsスクリプトのチェックを行います。
 	```
 	npm run lint
 	```
 	* 赤字のエラーが表示されたら修正が必要です。
-		- なお、チェックはすべてのjsファイルを `./tmp/allscript.js` に連結してから行っています。  
+		- なお、チェックはすべてのjsファイルを `./tmp/allscript.js` に連結してから行っています。
 		  エラー表示された箇所を `allscript.js` で確認し、元ファイルの該当箇所を修正してください。
 
 3. 下記コマンドを実行すると、js/cssファイルが変換されて ./dist フォルダに出力されます。
@@ -153,27 +146,15 @@ jsのソースファイルには JSDoc 3 に準拠したドックコメントを
 2. 作成されたドキュメントが自動的にOS規定のブラウザで開かれます。開かない場合は `./doc/index.html` を開いてください。
 
 
-## 更新情報／サポート
-
-* 下記ツイッターで行っています。関連ツイートにはハッシュタグ #lego_ex_R を付けます。
-	- [EarlgreyTea @earlgreypicard](https://twitter.com/earlgreypicard)
-* また2ちゃんねるやしたらばの関連スレッドも見るようにしています。
-* バグ管理表をPDFにしたものを下記URLのDropboxフォルダに入れておきますのでご覧ください。
-	- [https://www.dropbox.com/sh/827michh32zn6ez/AAAuIVTSCkSgmnw_fmU2mOZsa?dl=0](https://www.dropbox.com/sh/827michh32zn6ez/AAAuIVTSCkSgmnw_fmU2mOZsa?dl=0)
-		+ ダウンロードにアカウント登録は不要です。また今までの配布ファイルも置いておきます。
-
 
 ## 謝辞
 
-smorgasbord や、その派生スキン、スタイルの作者の方々  
-bbs2chreader/chaika の開発・メンテナンスに携わってこられた方々  
+smorgasbord や、その派生スキン、スタイルの作者の方々
+bbs2chreader/chaika の開発・メンテナンスに携わってこられた方々
 その他関連ソフトウェアの作者の方々に感謝いたします。
 
 
 ## 再配布／改変
-
-基本的にご自由にどうぞ。  
-ただし、改変したものを配布する際には名称やバージョンなど区別がつくようにお願いします。
 
 
 ----
