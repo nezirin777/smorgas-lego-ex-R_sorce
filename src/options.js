@@ -23,7 +23,7 @@ var SysPref = {
 	// 出さないようにすることができます
 	//===============================================================================
 	disableStorage: false,						/** ローカルストレージを使用しない(ex-R) */
-	
+
 	// [ポップアップ]
 	enableDefaultUpperPopup: false,				/** ポップアップを上側に表示する(ex) */
 	enableEmbedImageWithPopup: true,			/** 画像のインライン表示でポップアップも有効にする(ex) */
@@ -337,6 +337,7 @@ var SKIN_LOGLVL = SkinLogLvl.WARNING;
  * ローカルストレージへのアクセスを扱います。
  * @namespace
  */
+// eslint-disable-next-line no-redeclare
 var Storage = {
 	log: new SkinLog("Storage", SkinLogLvl.WARNING),
 	/**

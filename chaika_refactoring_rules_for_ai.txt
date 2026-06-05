@@ -1,0 +1,37 @@
+# ============================================================================== [cite: 1]
+# AI-TO-AI SYSTEM PROMPT & STRICT CONTEXT RULES FOR CHAIKA SKIN REFACTORING [cite: 1]
+# ============================================================================== [cite: 1]
+# ⚠️ WARNING TO THE AI PROCESSING THIS CONTEXT: [cite: 1]
+# You must strictly follow these constraints. [cite: 1]
+# Previous AI instances failed catastrophically by making baseless assumptions, ignoring environment constraints, and breaking existing runtime interfaces. [cite: 2]
+# READ THIS BEFORE GENERATING ANY CODE. [cite: 3]
+# ============================================================================== [cite: 3]
+
+## 1. PROJECT OVERVIEW & BASE PRINCIPLES
+* **Target Project**: Chaika (5ch browser addon) Skin Script Remake (Based on smorgas lego-ex-R). [cite: 4]
+* **Core Objective**: Refactor `script.js` into modern ES6 (Classes, cleaner logic) to improve maintainability and performance. [cite: 4]
+* **CRITICAL RULE 1**: Absolutely ZERO functional changes, ZERO feature additions, and ZERO behavioral modifications. [cite: 5]
+* **CRITICAL RULE 2**: Retain original JSDoc comments as the baseline, but you are permitted to modify or adjust them appropriately to match the refactored code. Do not delete them entirely or leave the code undocumented.
+* **CRITICAL RULE 3**: The original source code provided by the user is the ONLY absolute source of truth. [cite: 8] Never hypothesize or make assumptions about unexposed parts of the architecture. [cite: 9]
+
+## 2. INTERFACE & ARCHITECTURE CONSTRAINTS (PAST FATAL FAILS)
+### [CRITICAL] Do NOT Destroy or Rename Existing Interfaces
+* **Anti-Pattern (Previous AI Fail)**: When converting object literals to `class IDManager`, the previous AI deleted `init()` and `countIDs()` because it thought they were "absorbed by the constructor". [cite: 10] This caused a catastrophic `TypeError: ID.init is not a function` at runtime because other legacy modules were still actively invoking them. [cite: 11]
+* **Strict Rule**: Never delete, merge, or rename methods or properties that are accessed externally. [cite: 12] If a method like `init()` becomes redundant due to structural changes, you **MUST** keep an empty shell method `init() {}` or maintain backward-compatible wrappers to prevent breaking downstream modules. [cite: 13]
+
+### [CRITICAL] Do NOT Change DOM IDs or Selectors Based on Guesswork
+* **Anti-Pattern (Previous AI Fail)**: Changed `_doc.getElementById("content")` to `_doc.getElementById("thread")` because "it looked standard for a thread route". [cite: 14] This immediately broke DOM access. [cite: 15]
+* **Strict Rule**: Keep all string literal IDs, class names, attribute names, and markup targets EXACTLY as they are in the original source code. [cite: 15]
+
+### [CRITICAL] Ensure Global Instance Mapping
+* At the end of every refactored class, you must map the instantiated instance back to the original global variable name used by the system (e.g., `const ID = new IDManager();`, `const Nodes = new NodesManager();`) so the rest of the 4,600-line monolithic script doesn't break. [cite: 16]
+
+## 3. COMPILER & RUNTIME ENVIRONMENT CONSTRAINTS
+* **Modernized Environment**: The build toolchain and runtime environment (including character encoding constraints) have been modernized. You no longer need to worry about legacy build limitations.
+* **Syntax & Features**: You are free to use modern JavaScript syntax (such as optional chaining, nullish coalescing, and template literals) where appropriate, as legacy Babel 6 parsing errors and Shift_JIS byte-misalignment traps no longer apply.
+
+## 4. SUMMARY OF REFACTORING WORKFLOW FOR SUCCESSOR AI
+1.  **Analyze**: Read the exact segment provided by the user. [cite: 32] Do not look outside the segment unless instructed. [cite: 33]
+2.  **Keep ગાવા (Gawa) intact**: Maintain the exact variables, exact method names, exact parameter counts, and exact DOM queries. [cite: 33]
+3.  **Refactor Intelligently**: Apply modern ES syntax safely to improve readability and structure while strictly preserving the original architectural interfaces. Update JSDocs as needed.
+# ==============================================================================

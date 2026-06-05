@@ -1,9 +1,11 @@
 module.exports = {
-    "parser": "babel-eslint",
+    "parser": "@babel/eslint-parser",
     "parserOptions": {
       "sourceType": "script",
+      "requireConfigFile": false,
       "allowImportExportEverywhere": false,
-      "codeFrame": false
+      "codeFrame": false,
+      "ecmaVersion": 2020
     },
     "env": {
       "browser": true,

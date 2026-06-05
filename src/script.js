@@ -44,6 +44,7 @@ var AnalyseDialog = null;
 /**
  * スタイルシートを動的に作成します。
  */
+// eslint-disable-next-line no-redeclare
 class StyleSheet {
 	/**
 	 * 指定IDのスタイルシートを取得または作成します。
@@ -1576,7 +1577,7 @@ var Name = {
 	},
 	/**
 	 * 名前欄のresSystemクラスの要素を調べ、SLIPコテハンなら要素に分解して対応テーブルを作ります。
-	 * 
+	 *
 	 * @example
 	 * SLIPコテハンのフォーマットは以下の通り
 	 * vvv         : (ﾆｯｸﾈｰﾑ)
@@ -1586,7 +1587,7 @@ var Name = {
 	 * vvvvvv      : (ﾆｯｸﾈｰﾑ KOROKORO [IPまたは端末ID])
 	 * vvvvvv(浪人): (ﾆｯｸﾈｰﾑ KOROKORO [IPまたは端末ID [上級国民]])
 	 * KOROKORO    : 4桁英数記号-4桁英数記号
-	 * 
+	 *
 	 * 固定回線とモバイル回線の区別は一応ニックネームが回線種別を示すが、これはイベントや気まぐれで上書きされる可能性があるのでこれによる判定は無理
 	 * vvvvの端末IDとvvvvvのKOROKOROの区別が付かない可能性があるが、vvvvvとのマッチングを優先（つまり vvvvvv -> vvvの順）とする
 	 * KOROKOROを細分化しても仕様がたびたび変わるようだし、マイナスの前と後の２つに分割とする
@@ -1660,7 +1661,7 @@ var Name = {
 				}
 			}
 		});
-		
+
 		if(isDivide){
 			Array.from(Nodes.content.querySelectorAll('.slipAB,.slipIP')).forEach((slip) => {
 				const name = (slip.className === "slipAB") ? (slip.textContent + "-") : slip.textContent;
@@ -2434,7 +2435,7 @@ var ResImage = {
 		// 埋め込み画像・動画要素をクエリし、それを表示範囲中央からの距離でソート
 		//console.time("sort imageList");
 		this.imageList = Array.from(_doc.querySelectorAll(sel)).sort((a, b) => {
-			return Math.abs((a.getBoundingClientRect()).top - middleOffset) - 
+			return Math.abs((a.getBoundingClientRect()).top - middleOffset) -
 			       Math.abs((b.getBoundingClientRect()).top - middleOffset);
 		});
 		//console.timeEnd("sort imageList");
@@ -3519,7 +3520,7 @@ var Bookmark = {
 		this.log.dbg("save(" + url + "," + resNum + ")");
 		const bmkTbl = Storage.get("valueBookmarkIndex");
 		if(!bmkTbl) return;
-		
+
 		bmkTbl[url] = this.index = resNum;
 		Storage.set("valueBookmarkIndex", bmkTbl);
 	},
@@ -4983,7 +4984,7 @@ var IDPopup = {
 		if(e.button !== 0) return;
 
 		const node = e.target;
-		if(node.nodeType !== 1) return; 
+		if(node.nodeType !== 1) return;
 		if(node.className.match(/^resID/)){
 			IDPopup.show(node, node.getAttribute("rel"));
 		}else if(node.className.match(/mesID_/)){
@@ -5759,7 +5760,7 @@ var ThreadInfoPopup = {
 			content.appendChild(div);
 			Popup.add(content, source);
 		};
-		
+
 		/(.+)\/[^\/]*$/.exec(href);
 		const url = RegExp.$1 + "/";
 
@@ -6295,7 +6296,7 @@ var ThreadNameContextMenu = {
 	 * @param {string} id      メニュー項目の ID
 	 * @param {event}  e       オリジナルの click イベントの Event オブジェクト
 	 */
-	onClick(caption, id, e){
+	onClick(caption, id){
 		switch (id){
 		case "copyTitleAndUrl":
 			Clipboard.setClipboard(ThreadDocument.title + "\n" + TD.threadUrl + "\n");
@@ -6843,7 +6844,7 @@ class dialogOptions {
 					catch(e){
 						const errmsg = "RelplaceStr.txt の読み込みでエラーが発生しました。\n" +
 									   "以下のエラーメッセージを参考にして\n" +
-									   "ReplaceStr.txt を修正してください。\n\n" + 
+									   "ReplaceStr.txt を修正してください。\n\n" +
 									   e.message;
 						alert(errmsg);
 						return;
@@ -8620,7 +8621,7 @@ var ReplaceStr = {
 	/**
 	 * ReplaceStr.txtファイルの内容をパースして内部フォーマットにします。
 	 * @param {string}	text	ReplaceStr.txtファイルから読み込んだテキスト
-	 * 
+	 *
 	 * @see {@link http://janestyle.s11.xrea.com/help/first/ReplaceStr.html}
 	 */
 	parseRule(text){
