@@ -3,30 +3,46 @@
 .ivurLink,
 .ivurBlockedLink,
 .outLink {
-	padding-left: 12px; background: transparent url("img/link/external.png") no-repeat scroll left center;
+  padding-left: 12px;
+  background: url("img/link/external.png") no-repeat left center;
 }
+
 .outLink[rel*=".2ch.net/"],
 .outLink[rel*=".5ch.net/"] {
-	padding-left: 16px; background: transparent url("http://www.5ch.net/favicon.ico") no-repeat scroll left center/16px;
+  padding-left: 16px;
+  background: url("https://www.5ch.net/favicon.ico") no-repeat left center / 16px;
 }
+
 .outLink[rel*=".bbspink.com/"] {
-	padding-left: 16px; background: transparent url("http://deleter.bbspink.com/favicon.ico") no-repeat scroll left center/16px;
+  padding-left: 16px;
+  background: url("https://deleter.bbspink.com/favicon.ico") no-repeat left center / 16px;
 }
+
 .outLink[rel*=".machi.to/"] {
-	padding-left: 16px; background: transparent url("http://www.machi.to/favicon.ico") no-repeat scroll left center/16px;
+  padding-left: 16px;
+  background: url("https://www.machi.to/favicon.ico") no-repeat left center / 16px;
 }
+
 .outLink[rel*=".shitaraba.net"] {
-	padding-left: 16px; background: transparent url("http://jbbs.shitaraba.net/favicon.ico") no-repeat scroll left center/16px;
+  padding-left: 16px;
+  background: url("https://jbbs.shitaraba.net/favicon.ico") no-repeat left center / 16px;
 }
+
 .outLink[rel*=".2ch.sc/"] {
-	padding-left: 16px; background: transparent url("http://www.2ch.sc/favicon.ico") no-repeat scroll left center/16px;
+  padding-left: 16px;
+  background: url("https://www.2ch.sc/favicon.ico") no-repeat left center / 16px;
 }
+
 .outLink[rel*=".open2ch.net/"] {
-	padding-left: 16px; background: transparent url("http://www.open2ch.net/favicon.ico") no-repeat scroll left center/16px;
+  padding-left: 16px;
+  background: url("https://www.open2ch.net/favicon.ico") no-repeat left center / 16px;
 }
+
 .outLink[rel*="http://be.2ch.net"] {
-	padding-left: 14px; background: transparent url("img/link/type-be2ch.gif") no-repeat scroll left center;
+  padding-left: 14px;
+  background: url("img/link/type-be2ch.gif") no-repeat left center;
 }
+
 .outLink[rel*=".youtube.com/watch"],
 .outLink[rel*="//youtu.be/"],
 .outLink[rel*="//nicovideo.jp/watch/"],
@@ -35,25 +51,34 @@
 .outLink[rel*=".veoh.com/watch"],
 .outLink[rel*="//vimeo.com/"],
 .outLink[rel*=".metacafe.com/watch"] {
-	padding-left: 12px; background: transparent url("img/link/video.png") no-repeat scroll left center;
+  padding-left: 12px;
+  background: url("img/link/video.png") no-repeat left center;
 }
+
 .outLink[rel^="mailto:"] {
-	padding-left: 18px; background: transparent url("img/link/mail_icon.gif") no-repeat scroll left center;
+  padding-left: 18px;
+  background: url("img/link/mail_icon.gif") no-repeat left center;
 }
+
 .outLink[rel^="news://"] {
-	padding-left: 18px; background: transparent url("img/link/news_icon.png") no-repeat scroll left center;
+  padding-left: 18px;
+  background: url("img/link/news_icon.png") no-repeat left center;
 }
+
 .outLink[rel^="ftp://"] {
-	padding-left: 18px; background: transparent url("img/link/file_icon.gif") no-repeat scroll left center;
+  padding-left: 18px;
+  background: url("img/link/file_icon.gif") no-repeat left center;
 }
+
 .outLink[rel^="irc://"] {
-	padding-left: 18px; background: transparent url("img/link/discussionitem_icon.gif") no-repeat scroll left center;
+  padding-left: 18px;
+  background: url("img/link/discussionitem_icon.gif") no-repeat left center;
 }
+
 .outLink[rel$=".ogg"],
 .outLink[rel$=".OGG"],
 .outLink[rel$=".mid"],
 .outLink[rel$=".MID"],
-.outLink[rel$=".mid"],
 .outLink[rel$=".MIDI"],
 .outLink[rel$=".mp3"],
 .outLink[rel$=".MP3"],
@@ -61,26 +86,34 @@
 .outLink[rel$=".WAV"],
 .outLink[rel$=".wma"],
 .outLink[rel$=".WMA"] {
-	padding-left: 12px; background: transparent url("img/link/audio.png") no-repeat scroll left center;
+  padding-left: 12px;
+  background: url("img/link/audio.png") no-repeat left center;
 }
+
 .outLink[rel$=".ogm"],
 .outLink[rel$=".OGM"],
 .outLink[rel$=".AVI"],
 .outLink[rel$=".mpeg"],
 .outLink[rel$=".MPEG"],
 .outLink[rel$=".mpg"] {
-	padding-left: 12px; background: transparent url("img/link/video.png") no-repeat scroll left center;
+  padding-left: 12px;
+  background: url("img/link/video.png") no-repeat left center;
 }
+
 .outLink[rel$=".pdf"],
 .outLink[rel$=".PDF"] {
-	padding-left: 18px; background: transparent url("img/link/pdf_icon.gif") no-repeat scroll left center;
+  padding-left: 18px;
+  background: url("img/link/pdf_icon.gif") no-repeat left center;
 }
+
 .outLink[rel$=".doc"],
 .outLink[rel$=".DOC"],
 .outLink[rel$=".txt"],
 .outLink[rel$=".TXT"] {
-	padding-left: 12px; background: transparent url("img/link/document.png") no-repeat scroll left center;
+  padding-left: 12px;
+  background: url("img/link/document.png") no-repeat left center;
 }
+
 .outLink[rel$=".gif"],
 .outLink[rel$=".GIF"],
 .outLink[rel$=".png"],
@@ -93,14 +126,17 @@
 .outLink[rel$=".JPEG"],
 .outLink[rel$=".tiff"],
 .outLink[rel$=".TIFF"] {
-	padding-left: 12px; background: transparent url("img/link/image.png") no-repeat scroll left center;
+  padding-left: 12px;
+  background: url("img/link/image.png") no-repeat left center;
 }
+
 .outLink[title^="表示注意"] {
-	background: transparent url("img/lego/img-alert.png") no-repeat scroll left center;
+  background: url("img/lego/img-alert.png") no-repeat left center;
 }
+
 .ivurBlockedLink,
 .outLink[title^="エラー"] {
-	background: transparent url("img/lego/img-error.png") no-repeat scroll left center;
+  background: url("img/lego/img-error.png") no-repeat left center;
 }
 
 /* file end */

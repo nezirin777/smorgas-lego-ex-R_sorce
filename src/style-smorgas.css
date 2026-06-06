@@ -3,131 +3,263 @@
 	本家 smorgasboardスキン風のスタイル
 */
 /* ページ背景のスタイル ---------------------------------------------------- */
-body { background: url("img/bg.png"); }
+body {
+  background: url("img/bg.png");
+}
 
 /* リンクのスタイル -------------------------------------------------------- */
 
 /* ヘッダのスタイル -------------------------------------------------------- */
 #header {
-	position: fixed;
-	top: 0px;
-	left: 0px;
-	right: 0px;
-	height: 40px;
-	margin: 0;
-	padding: 0;
-	background-image: url("img/header.png");
-	z-index: 1;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 40px;
+  margin: 0;
+  padding: 0;
+  background-image: url("img/header.png");
+  z-index: 1;
 }
+
 h1 {
-	margin: 0px;
-	padding: 1px 0px 0px 24px;
-	height: 32px;
-	line-height:32px;
-	font-size: 14px;
-	color: #FFFFEE;
-	vertical-align: middle;
-	white-space: nowrap;
-	overflow: hidden;
+  margin: 0;
+  padding: 1px 0 0 24px;
+  height: 32px;
+  line-height: 32px;
+  font-size: 14px;
+  color: #FFFFEE;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
 }
-#boardName 	{ background: url("img/goup.png") no-repeat left center; padding-left: 12px; }
-#resCount::before { content: "("; }
-#resCount::after  { content: ")"; }
-#statusText { margin-left: 8px; }
-.throbber 	{ background: url("img/throbber.gif") no-repeat left center; }
-.ok 		{ background: url("img/ok.png") no-repeat left center; }
-.warning  	{ background: url("img/warning.png") no-repeat left center; }
-.error 		{ background: url("img/error.png") no-repeat left center; }
+
+#boardName {
+  background: url("img/goup.png") no-repeat left center;
+  padding-left: 12px;
+}
+
+#resCount::before {
+  content: "(";
+}
+
+#resCount::after {
+  content: ")";
+}
+
+#statusText {
+  margin-left: 8px;
+}
+
+.throbber {
+  background: url("img/throbber.gif") no-repeat left center;
+}
+
+.ok {
+  background: url("img/ok.png") no-repeat left center;
+}
+
+.warning {
+  background: url("img/warning.png") no-repeat left center;
+}
+
+.error {
+  background: url("img/error.png") no-repeat left center;
+}
 
 /* コマンドアイコンのスタイル ---------------------------------------------- */
 #command {
-	position: absolute;
-	top: 0px;
-	right: 0px;
-	height: 32px;
-	line-height:32px;
-	color: #FFFFEE;
-	font-size: 11px;
-	background-image: url("img/header.png");
-	-moz-user-select: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 32px;
+  line-height: 32px;
+  color: #FFFFEE;
+  font-size: 11px;
+  background-image: url("img/header.png");
+  -moz-user-select: none;
+  user-select: none;
 }
-#command > ul > li#autoReload 	{ display: none; }
-#command > ul > li#autoScroll 	{ display: none; }
-#command > ul > li#threadMenu 	{ display: none; }
-#command > ul > li#showAll 		{ background: url("img/showall.png") no-repeat left center; padding-left: 20px; }
-#command > ul > li#find 		{ background: url("img/find.png")    no-repeat left center; padding-left: 20px; }
-#command > ul > li#chevron 		{ background: url("img/chevron.png") no-repeat left center; padding-left: 20px; }
-#command > ul > li#goPrev  		{ display: none; }
-#findText    					{ display: none; }
-#chevronText 				{ display: none; }
-#command > ul > li.div:after	{ padding: 0px 1px 0px 1px; content:"|"; }
+
+#command>ul>li#autoReload {
+  display: none;
+}
+
+#command>ul>li#autoScroll {
+  display: none;
+}
+
+#command>ul>li#threadMenu {
+  display: none;
+}
+
+#command>ul>li#showAll {
+  background: url("img/showall.png") no-repeat left center;
+  padding-left: 20px;
+}
+
+#command>ul>li#find {
+  background: url("img/find.png") no-repeat left center;
+  padding-left: 20px;
+}
+
+#command>ul>li#chevron {
+  background: url("img/chevron.png") no-repeat left center;
+  padding-left: 20px;
+}
+
+#command>ul>li#goPrev {
+  display: none;
+}
+
+#findText {
+  display: none;
+}
+
+#chevronText {
+  display: none;
+}
+
+#command>ul>li.div::after {
+  padding: 0 1px;
+  content: "|";
+}
 
 /* 検索関連のスタイル ------------------------------------------------------ */
-strong { color: white; background-color: orange; font-weight: normal; }
+strong {
+  color: white;
+  background-color: orange;
+  font-weight: normal;
+}
 
 /* ヘッダ部周辺のその他のスタイル ------------------------------------------ */
-#showBarText { visibility: hidden; }
+#showBarText {
+  visibility: hidden;
+}
 
 /* コンテンツ表示部のスタイル ---------------------------------------------- */
 #content {
-	border-width: 0px 1px 1px 1px;
-	border-color: #CCCCCC;
-	border-style: solid;
-	padding-top: 32px;
+  border-width: 0 1px 1px;
+  border-color: #CCCCCC;
+  border-style: solid;
+  padding-top: 32px;
 }
 
 /* フッタのスタイル -------------------------------------------------------- */
-#footer { background: url("img/footer.png"); }
+#footer {
+  background: url("img/footer.png");
+}
 
 /* 新着区切りのスタイル ---------------------------------------------------- */
 #NewMark {
-	visibility: hidden;
-	height: 0px;
-	width:100%;
-	margin: 0px;
-	padding: 0px;
+  visibility: hidden;
+  height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 /* レス表示部のスタイル ---------------------------------------------------- */
 .resContainer {
-	color: #000;
-	border-top: 1px dotted;
-	border-color: #CCCCCC;
-	margin: 0px;
-	padding: 8px 16px 8px 16px;
+  color: #000;
+  border-top: 1px dotted;
+  border-color: #CCCCCC;
+  margin: 0;
+  padding: 8px 16px;
 }
+
 /* レス表示切替 */
-.resContainer { display: block; }
-.resContainer[hide] { display: none; }
+.resContainer {
+  display: block;
+}
+
+.resContainer[hide] {
+  display: none;
+}
+
 /* レスヘッダ */
-.resHeader, .resNewHeader { white-space: nowrap; }
+.resHeader,
+.resNewHeader {
+  white-space: nowrap;
+}
+
 /* レス番号部 */
-.resHeader    .resNumber > a { color: #096CE6; text-decoration: none; }
-.resNewHeader .resNumber > a { color: #FE5D47; text-decoration: none; }
-.resHeader    .resNumber::before { content: url("img/read.png"); }
-.resNewHeader .resNumber::before { content: url("img/new.png"); }
+.resHeader .resNumber>a {
+  color: #096CE6;
+  text-decoration: none;
+}
+
+.resNewHeader .resNumber>a {
+  color: #FE5D47;
+  text-decoration: none;
+}
+
+.resHeader .resNumber::before {
+  content: url("img/read.png");
+}
+
+.resNewHeader .resNumber::before {
+  content: url("img/new.png");
+}
+
 .resNumber div.count {
-	color: #096CE6 !important; font-size: 0.7em !important; line-height: 0.8em !important;
+  color: #096CE6 !important;
+  font-size: 0.7em !important;
+  line-height: 0.8em !important;
 }
-.resNewHeader > .resNumber div.count { color: #FE5D47 !important; }
+
+.resNewHeader>.resNumber div.count {
+  color: #FE5D47 !important;
+}
+
 .resNumber {
-	float:left;
-	width: 4em;
-	font-size: 1.2em;
-	font-weight: bold;
-	text-align: right;
+  float: left;
+  width: 4em;
+  font-size: 1.2em;
+  font-weight: bold;
+  text-align: right;
 }
-.tbNum { text-decoration: underline!important; }
+
+.tbNum {
+  text-decoration: underline !important;
+}
+
 /* 名前欄 */
-.resName { margin-left: 0.7em; color: red; font-weight: bold; text-decoration: underline; }
-.resName[title=""] { color: green; }
-.resName[title^="sage"] { color: black; }
+.resName {
+  margin-left: 0.7em;
+  color: red;
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.resName[title=""] {
+  color: green;
+}
+
+.resName[title^="sage"] {
+  color: black;
+}
+
 /* メール欄 */
-.resMail { color: red; font-weight: bold; }
-.resMail[title=""] { display: none; }
-.resMail[title^="sage"] { display: none; }
+.resMail {
+  color: red;
+  font-weight: bold;
+}
+
+.resMail[title=""] {
+  display: none;
+}
+
+.resMail[title^="sage"] {
+  display: none;
+}
+
 /* 本文 */
-.resBody { padding:0px; margin-top: 1px; margin-left:5.5em; }
+.resBody {
+  padding: 0;
+  margin-top: 1px;
+  margin-left: 5.5em;
+}
 
 /* あぼーん関連のスタイル -------------------------------------------------- */
 
@@ -138,26 +270,30 @@ strong { color: white; background-color: orange; font-weight: normal; }
 
 /* ポップアップのスタイル -------------------------------------------------- */
 .shadowTopRight {
-	background: url("img/topright.png") no-repeat top right;
+  background: url("img/topright.png") no-repeat top right;
 }
-.shadowBottomLeft  {
-	background: url("img/bottomleft.png") no-repeat bottom left;
+
+.shadowBottomLeft {
+  background: url("img/bottomleft.png") no-repeat bottom left;
 }
+
 .shadowBottomRight {
-	background: url("img/bottomright.png") no-repeat bottom right;
-	padding: 0px 4px 4px 0px;
+  background: url("img/bottomright.png") no-repeat bottom right;
+  padding: 0 4px 4px 0;
 }
+
 .shadowRight {
-	background: url("img/right.png") repeat-y right;
-	position: relative;
-	left: 5px;
-	top:1px;
+  background: url("img/right.png") repeat-y right;
+  position: relative;
+  left: 5px;
+  top: 1px;
 }
+
 .shadowBottom {
-	background: url("img/bottom.png") repeat-x bottom;
-	position: relative;
-	left: -4px;
-	top:4px;
+  background: url("img/bottom.png") repeat-x bottom;
+  position: relative;
+  left: -4px;
+  top: 4px;
 }
 
 /* コンテキストメニューのスタイル ------------------------------------------ */

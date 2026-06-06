@@ -1,119 +1,214 @@
 /* スタイル定義: シンプル(軽量) */
 /* ページ背景のスタイル ---------------------------------------------------- */
-body { background-color: #EFEFEF; }
+body {
+  background-color: #EFEFEF;
+}
 
 /* リンクのスタイル -------------------------------------------------------- */
 
 /* ヘッダのスタイル -------------------------------------------------------- */
 #header {
-	position: fixed;
-	top: 0px;
-	left: 0px;
-	right: 0px;
-	height: 28px;
-	border-bottom: 1px solid #808080;
-	margin: 0;
-	padding: 0;
-	background-color: #EFEFEF;
-	z-index: 1;
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 28px;
+  border-bottom: 1px solid #808080;
+  margin: 0;
+  padding: 0;
+  background-color: #EFEFEF;
+  z-index: 1;
 }
+
 h1 {
-	margin: 0px;
-	padding: 1px 0px 0px 24px;
-	height: 28px;
-	line-height:28px;
-	font-size: 14px;
-	color: #666666;
-	vertical-align: middle;
-	white-space: nowrap;
-	overflow: hidden;
+  margin: 0;
+  padding: 1px 0 0 24px;
+  height: 28px;
+  line-height: 28px;
+  font-size: 14px;
+  color: #666666;
+  vertical-align: middle;
+  white-space: nowrap;
+  overflow: hidden;
 }
-h1 > a { color: #666666; text-decoration: none; }
-h1 > a:visited { color: #666666; }
-#boardName { padding-top: 4px; }
-#resCount:before { content: "("; }
-#resCount:after  { content: ")"; }
+
+h1>a {
+  color: #666666;
+  text-decoration: none;
+}
+
+h1>a:visited {
+  color: #666666;
+}
+
+#boardName {
+  padding-top: 4px;
+}
+
+#resCount::before {
+  content: "(";
+}
+
+#resCount::after {
+  content: ")";
+}
 
 /* コマンドアイコンのスタイル ---------------------------------------------- */
 #command {
-	position: absolute;
-	top: 0px;
-	right: 0px;
-	height: 28px;
-	line-height:28px;
-	color: #666666;
-	font-size: 11px;
-	background-color: #EFEFEF;
-	-moz-user-select: none;
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 28px;
+  line-height: 28px;
+  color: #666666;
+  font-size: 11px;
+  background-color: #EFEFEF;
+  -moz-user-select: none;
+  user-select: none;
 }
-#command > ul > li { padding: 8px 0px 6px 0px; }
-#command > ul > li#showAll 		{ display: none; }
-#command > ul > li#goPrev  		{ display: none; }
-#command > ul > li.div:after	{ padding: 0px 1px 0px 1px; content:"|"; }
+
+#command>ul>li {
+  padding: 8px 0 6px;
+}
+
+#command>ul>li#showAll {
+  display: none;
+}
+
+#command>ul>li#goPrev {
+  display: none;
+}
+
+#command>ul>li.div::after {
+  padding: 0 1px;
+  content: "|";
+}
 
 /* 検索関連のスタイル ------------------------------------------------------ */
-strong { color: white; background-color: orange; font-weight: normal; }
+strong {
+  color: white;
+  background-color: orange;
+  font-weight: normal;
+}
 
 /* ヘッダ部周辺のその他のスタイル ------------------------------------------ */
 
 /* コンテンツ表示部のスタイル ---------------------------------------------- */
 #content {
-	border-width: 0px 1px 1px 1px;
-	border-color: #CCCCCC;
-	border-style: solid;
-	padding-top: 32px;
+  border-width: 0 1px 1px;
+  border-color: #CCCCCC;
+  border-style: solid;
+  padding-top: 32px;
 }
 
 /* フッタのスタイル -------------------------------------------------------- */
 
 /* 新着区切りのスタイル ---------------------------------------------------- */
 #NewMark {
-	visibility: hidden;
-	height: 0px;
-	width:100%;
-	margin: 0px;
-	padding: 0px;
+  visibility: hidden;
+  height: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
 }
 
 /* レス表示部のスタイル ---------------------------------------------------- */
 .resContainer {
-	color: #666666;
-	border: none;
-	margin: 0px;
-	padding: 8px 16px 8px 16px;
+  color: #666666;
+  border: none;
+  margin: 0;
+  padding: 8px 16px;
 }
+
 /* レス表示切替 */
-.resContainer { display: block; }
-.resContainer[hide] { display: none; }
+.resContainer {
+  display: block;
+}
+
+.resContainer[hide] {
+  display: none;
+}
+
 /* レスヘッダ */
-.resHeader, .resNewHeader { white-space: nowrap; }
+.resHeader,
+.resNewHeader {
+  white-space: nowrap;
+}
+
 /* レス番号部 */
-.resHeader    .resNumber > a { color: #096CE6; text-decoration: none; }
-.resNewHeader .resNumber > a { color: #FE5D47; text-decoration: none; }
+.resHeader .resNumber>a {
+  color: #096CE6;
+  text-decoration: none;
+}
+
+.resNewHeader .resNumber>a {
+  color: #FE5D47;
+  text-decoration: none;
+}
+
 .resNumber div.count {
-	color: #096CE6 !important; font-size: 0.7em !important; line-height: 0.8em !important;
+  color: #096CE6 !important;
+  font-size: 0.7em !important;
+  line-height: 0.8em !important;
 }
-.resNewHeader > .resNumber div.count { color: #FE5D47 !important; }
+
+.resNewHeader>.resNumber div.count {
+  color: #FE5D47 !important;
+}
+
 .resNumber {
-	float:left;
-	width: 4em;
-	font-size: 1.2em;
-	font-weight: bold;
-	text-align: right;
+  float: left;
+  width: 4em;
+  font-size: 1.2em;
+  font-weight: bold;
+  text-align: right;
 }
-.tbNum  { text-decoration: underline!important; }
+
+.tbNum {
+  text-decoration: underline !important;
+}
+
 /* 名前欄 */
-.resName { margin-left: 0.7em; color: red; font-weight: bold; text-decoration: underline; }
-.resName[title=""] { color: green; }
-.resName[title^="sage"] { color: #666666; }
+.resName {
+  margin-left: 0.7em;
+  color: red;
+  font-weight: bold;
+  text-decoration: underline;
+}
+
+.resName[title=""] {
+  color: green;
+}
+
+.resName[title^="sage"] {
+  color: #666666;
+}
+
 /* メール欄 */
-.resMail { color: red; font-weight: bold; }
-.resMail[title=""] { display: none; }
-.resMail[title^="sage"] { display: none; }
+.resMail {
+  color: red;
+  font-weight: bold;
+}
+
+.resMail[title=""] {
+  display: none;
+}
+
+.resMail[title^="sage"] {
+  display: none;
+}
+
 /* 本文 */
-.resBody { padding: 0px; margin-top: 1px; margin-left: 5.5em; }
+.resBody {
+  padding: 0;
+  margin-top: 1px;
+  margin-left: 5.5em;
+}
+
 /* レス選択 */
-.resSelected { background-color: #8DB6F1; }
+.resSelected {
+  background-color: #8DB6F1;
+}
 
 /* あぼーん関連のスタイル -------------------------------------------------- */
 
@@ -123,32 +218,47 @@ strong { color: white; background-color: orange; font-weight: normal; }
 
 /* ポップアップのスタイル -------------------------------------------------- */
 .shadowTopRight {
-	background: url("img/topright.png")    no-repeat top right;
+  background: url("img/topright.png") no-repeat top right;
 }
-.shadowBottomLeft  {
-	background: url("img/bottomleft.png")  no-repeat bottom left;
+
+.shadowBottomLeft {
+  background: url("img/bottomleft.png") no-repeat bottom left;
 }
+
 .shadowBottomRight {
-	background: url("img/bottomright.png") no-repeat bottom right;
-	padding: 0px 4px 4px 0px;
+  background: url("img/bottomright.png") no-repeat bottom right;
+  padding: 0 4px 4px 0;
 }
+
 .shadowRight {
-	background: url("img/right.png")       repeat-y right;
-	position: relative;
-	left: 5px;
-	top:1px;
+  background: url("img/right.png") repeat-y right;
+  position: relative;
+  left: 5px;
+  top: 1px;
 }
+
 .shadowBottom {
-	background: url("img/bottom.png")      repeat-x bottom;
-	position: relative;
-	left: -4px;
-	top:4px;
+  background: url("img/bottom.png") repeat-x bottom;
+  position: relative;
+  left: -4px;
+  top: 4px;
 }
 
 /* コンテキストメニューのスタイル ------------------------------------------ */
-#contextCopy { background: none; }
-#contextHistory { background: none; }
-#contextThreadItem { background: none; }
-#contextFolderClosed { background: none; }
+#contextCopy {
+  background: none;
+}
+
+#contextHistory {
+  background: none;
+}
+
+#contextThreadItem {
+  background: none;
+}
+
+#contextFolderClosed {
+  background: none;
+}
 
 /* ダイアログのスタイル ---------------------------------------------------- */
