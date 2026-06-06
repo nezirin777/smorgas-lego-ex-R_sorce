@@ -11,40 +11,53 @@
 var _doc = document;
 
 /**
- * ネットワークリクエストを制御する静的ユーティリティクラス
- */
-class Http {
-	/**
-	 * 指定URLからリソースを非同期でテキストとして取得します。
-	 * @param {string}		url		リクエストするURL
-	 * @param {boolean}		[force]	強制取得（キャッシュを無視する場合にtrue）
-	 * @return {Promise<string>}	レスポンスのテキストを解決するPromise
-	 */
-	static get(url, force) {
-		const options = {};
-		if(typeof force !== "undefined" && force){
-			options.headers = {
-				"If-Modified-Since": "Wed, 15 Nov 1995 00:00:00 GMT"
-			};
-		}
-
-		return fetch(url, options)
-			.then(response => {
-				if(response.ok){
-					return response.text();
-				}
-				throw new Error(response.statusText || `HTTP error! status: ${response.status}`);
-			});
-	}
-}
-
-/**
- * 後方互換性のためのグローバルラッパー関数。
- * 既存の他モジュールや巨大スクリプトの呼び出し箇所を破壊しないために維持します。
- * @deprecated 新しいコードでは直接 Http.get(url, force) を利用してください。
+ * ファイルやスレッドをchaikaから非同期で取得します。
+ * （fetch API を用い、URLの特性から動的に文字コードを自動判別してデコードします）
+ * @param {string}		url		リクエストするURL
+ * @param {boolean}		[force]	強制取得
+ * @return {Promise<string>}	デコードされた文字列
  */
 function AjaxGet(url, force){
-	return Http.get(url, force);
+	const options = {};
+	if(typeof force !== "undefined" && force){
+		options.headers = {
+			"If-Modified-Since": "Wed, 15 Nov 1995 00:00:00 GMT"
+		};
+	}
+
+	return fetch(url, options)
+		.then(response => {
+			if(!response.ok){
+				throw new Error(response.statusText || `HTTP error! status: ${response.status}`);
+			}
+			// バイナリデータとして一度取得する
+			return response.arrayBuffer().then(buffer => {
+				let charset = "utf-8"; // デフォルトはUTF-8
+
+				// 1. レスポンスの Content-Type ヘッダーから charset の抽出を試みる
+				const contentType = response.headers.get("Content-Type");
+				if(contentType){
+					const match = contentType.match(/charset=([^;]+)/i);
+					if(match){
+						charset = match[1];
+					}
+				}
+
+				// 2. ヘッダーに明示的な指定がない場合、リクエストURLから判定する
+				// ローカルの静的アセット（.txt, .json, .js, .css, .html）以外は、
+				// chaikaサーバーの動的コンテンツ（Shift_JIS）とみなして処理する
+				if(charset.toLowerCase() === "utf-8" || charset.toLowerCase() === "utf-8;"){
+					const isLocalAsset = /\.(txt|json|js|css|html)(\?.*)?$/i.test(url);
+					if(!isLocalAsset){
+						charset = "Shift_JIS";
+					}
+				}
+
+				// 判別した文字コードでデコードを実行する
+				const decoder = new TextDecoder(charset);
+				return decoder.decode(buffer);
+			});
+		});
 }
 
 // ダイアログ
@@ -395,12 +408,11 @@ class ResNodesManager {
 	 * @param {boolean}		[selected]	選択されたレスのみ
 	 * @return {Array<Element>}	要素の配列
 	 */
+
 	getContainers(node, selected){
-		const fn = "getContainers(node," + selected + ")";
 		let elems = Array.from((node || Nodes.content).querySelectorAll(selected ? ".resSelected" : ".resContainer"));
-		if(elems && elems.length > 0) return elems;
+		if(selected || (elems && elems.length > 0)) return elems;
 		elems = Array.from((node || Nodes.popupRoot).getElementsByClassName("resPopup"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
 		return elems || [];
 	}
 	/**
@@ -409,10 +421,7 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getHeaders(node){
-		const fn = "getHeaders(node)";
-		const elems = Array.from((node || Nodes.content).getElementsByClassName("resHeader"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).getElementsByClassName("resHeader")) || [];
 	}
 	/**
 	 * すべての新着レスヘッダ要素を取得します。
@@ -420,10 +429,7 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getNewHeaders(node){
-		const fn = "getNewHeaders(node)";
-		const elems = Array.from((node || Nodes.content).getElementsByClassName("resNewHeader"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).getElementsByClassName("resNewHeader")) || [];
 	}
 	/**
 	 * すべてのレス番号要素を取得します。
@@ -431,10 +437,7 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getNumbers(node){
-		const fn = "getNumbers(node)";
-		const elems = Array.from((node || Nodes.content).querySelectorAll(".resNumber > a"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).querySelectorAll(".resNumber > a")) || [];
 	}
 	/**
 	 * すべての名前欄要素を取得します。
@@ -442,10 +445,7 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getNames(node){
-		const fn = "getNames(node)";
-		const elems = Array.from((node || Nodes.content).getElementsByClassName("resName"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).getElementsByClassName("resName")) || [];
 	}
 	/**
 	 * すべてのメール欄要素を取得します。
@@ -453,10 +453,7 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getMails(node){
-		const fn = "getMails(node)";
-		const elems = Array.from((node || Nodes.content).getElementsByClassName("resMail"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).getElementsByClassName("resMail")) || [];
 	}
 	/**
 	 * すべての日付欄要素を取得します。
@@ -464,10 +461,7 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getDates(node){
-		const fn = "getDates(node)";
-		const elems = Array.from((node || Nodes.content).getElementsByClassName("resDate"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).getElementsByClassName("resDate")) || [];
 	}
 	/**
 	 * すべての ID 欄要素を取得します。
@@ -475,12 +469,8 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getIDs(node){
-		const fn = "getIDs(node)";
-		const elems = Array.from((node || Nodes.content).querySelectorAll(".resContainer .resID[rel]"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).querySelectorAll(".resContainer .resID[rel]")) || [];
 	}
-
 
 	/**
 	 * すべての BeID 欄要素を取得します。
@@ -488,18 +478,16 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getBeIDs(node){
-		const fn = "getBeIDs(node)";
-		const elems = Array.from((node || Nodes.content).getElementsByClassName("resBeID"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).getElementsByClassName("resBeID")) || [];
 	}
+
 	/**
 	 * すべての有効なあぼーん情報要素を取得します。
 	 * @param {Element}	node	親ノード
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getInfoAbones(node){
-		return Array.from((node || Nodes.content).querySelectorAll(".resContainer[aboned='true'] .resInfoAbone"));
+		return Array.from((node || Nodes.content).querySelectorAll(".resContainer[aboned='true'] .resInfoAbone")) || [];
 	}
 	/**
 	 * すべての本文要素を取得します。
@@ -507,21 +495,16 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getBodies(node){
-		const fn = "getBodies(node)";
-		const elems = Array.from((node || Nodes.content).getElementsByClassName("resBody"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).getElementsByClassName("resBody")) || [];
 	}
 	/**
 	 * すべてのレスアンカー要素を取得します。
 	 * @param {Element}	node	親ノード
 	 * @return {Array<Element>}	要素の配列
 	 */
+
 	getResAnchors(node){
-		const fn = "getResAnchors(node)";
-		const elems = Array.from((node || Nodes.content).querySelectorAll(".resBody .resPointer"));
-		if(!elems || elems.length === 0) this.errNotFound(fn);
-		return elems || [];
+		return Array.from((node || Nodes.content).querySelectorAll(".resBody .resPointer")) || [];
 	}
 	/**
 	 * すべてのIDアンカーの外側span要素を取得します。
@@ -529,7 +512,7 @@ class ResNodesManager {
 	 * @return {Array<Element>}	要素の配列
 	 */
 	getResMesIDs(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resMesID"));
+		return Array.from((node || Nodes.content).getElementsByClassName("resMesID")) || [];
 	}
 	/**
 	 * すべての外部リンク要素を取得します。
