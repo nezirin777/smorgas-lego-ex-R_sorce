@@ -8,7 +8,8 @@
     "lint": "gulp lint",
     "doc": "gulp doc",
     "dist": "gulp dist",
-    "dev": "gulp dev"
+    "dev": "gulp dev",
+    "update-table": "gulp updateTable"
   },
   "author": "EarlgreyTea (https://twitter.com/earlgreypicard)",
   "devDependencies": {

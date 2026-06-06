@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>chaika板名テーブル (boardtable.js) 簡易生成ツール</title>
+    <style>
+        body { font-family: sans-serif; max-width: 800px; margin: 30px auto; padding: 0 15px; line-height: 1.6; color: #333; }
+        h1 { border-bottom: 2px solid #007bff; padding-bottom: 10px; font-size: 24px; }
+        .box { background: #f8f9fa; padding: 15px; border: 1px solid #ddd; border-radius: 4px; margin-bottom: 20px; }
+        textarea { width: 100%; height: 350px; font-family: monospace; font-size: 13px; box-sizing: border-box; padding: 10px; border: 1px solid #ccc; border-radius: 4px; }
+        button { padding: 10px 20px; font-size: 16px; font-weight: bold; cursor: pointer; background: #007bff; color: #fff; border: none; border-radius: 4px; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .log { background: #1e1e1e; color: #35f53d; padding: 12px; height: 160px; overflow-y: auto; font-family: monospace; font-size: 13px; border-radius: 4px; margin-bottom: 20px; box-sizing: border-box; }
+        .log div { margin-bottom: 4px; }
+    </style>
+</head>
+<body>
+    <h1>chaika板名テーブル (boardtable.js) 簡易生成ツール</h1>
+    <p>Node.jsやGulp環境がない人向けに、ブラウザのみで boards.xml から最新の板名情報をパースし、<code>boardtable.js</code> を自動生成します。</p>
+
+    <div class="box">
+        <h3>ステップ 1: <code>boards.xml</code> の指定</h3>
+        <p>「ファイルを選択」から、同じフォルダにある <code>boards.xml</code> を選択してください。</p>
+        <input type="file" id="fileInput" accept=".xml">
+    </div>
+
+    <div class="box">
+        <h3>ステップ 2: 同期の実行</h3>
+        <p>外部サーバーからBBSMENUを安全にフェッチし、重複を排除したマージを行います（数秒〜十数秒かかります）。</p>
+        <button id="startButton" disabled>板名データを同期・生成する</button>
+    </div>
+
+    <h3>実行ログ</h3>
+    <div class="log" id="logArea">boards.xml ファイルを読み込んでください...</div>
+
+    <div class="box">
+        <h3>ステップ 3: 生成コードの貼り付け</h3>
+        <p>処理が完了すると、下に最新のプログラムコードが出力されます。内容をすべて選択（Ctrl+A）してコピーし、お手元の <code>src/boardtable.js</code>（またはスキン内の <code>boardtable.js</code>）の中身すべてを消去して上書きペースト（保存）してください。</p>
+        <textarea id="outputArea" readonly placeholder="ここに生成された boardtable.js の中身が出力されます。"></textarea>
+    </div>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const startButton = document.getElementById('startButton');
+        const logArea = document.getElementById('logArea');
+        const outputArea = document.getElementById('outputArea');
+
+        let boardsXmlText = '';
+
+        fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (evt) => {
+                boardsXmlText = evt.target.result;
+                log('boards.xml の読み込みに成功しました。ボタンを押して同期を開始してください。');
+                startButton.disabled = false;
+            };
+            reader.readAsText(file, 'utf-8');
+        });
+
+        function log(msg) {
+            const div = document.createElement('div');
+            div.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+            logArea.appendChild(div);
+            logArea.scrollTop = logArea.scrollHeight;
+        }
+
+        // CORS制限をバイパスするパブリックプロキシ
+        const CORS_PROXY = 'https://api.allorigins.win/raw?url=';
+
+        async function fetchBbsmenu(url) {
+            const proxyUrl = CORS_PROXY + encodeURIComponent(url);
+            const res = await fetch(proxyUrl);
+            if (!res.ok) throw new Error(`HTTP ${res.status}`);
+            const arrayBuf = await res.arrayBuffer();
+            const decoder = new TextDecoder('shift_jis');
+            return decoder.decode(arrayBuf);
+        }
+
+        startButton.addEventListener('click', async () => {
+            startButton.disabled = true;
+            outputArea.value = '';
+            logArea.innerHTML = '';
+            log('同期パース処理を開始します...');
+
+            const nameTblEntries = new Map();
+            let xmlText = boardsXmlText.replace(/<!--[\s\S]*?-->/g, '');
+
+            // 1. 直書きされている個別板の抽出
+            const boardAttrRegex = /<board\s+([^>]+)\/?>/g;
+            let boardMatch;
+            while ((boardMatch = boardAttrRegex.exec(xmlText)) !== null) {
+                const attrs = boardMatch[1];
+                const titleMatch = /title="([^"]+)"/.exec(attrs);
+                const urlMatch = /url="([^"]+)"/.exec(attrs);
+                if (titleMatch && urlMatch) {
+                    const title = titleMatch[1].trim();
+                    const rawUrl = urlMatch[1].trim();
+                    if (rawUrl.startsWith('http://127.0.0.1')) continue;
+
+                    let hostAndPath = rawUrl.replace(/^(?:https?:)?\/\//i, '');
+                    if (!hostAndPath.endsWith('/')) hostAndPath += '/';
+                    nameTblEntries.set(hostAndPath, title);
+                }
+            }
+            log(`boards.xml 内の個別板定義を ${nameTblEntries.size} 件 抽出しました。`);
+
+            // 2. 外部BBSMENUリンク定義の抽出
+            const bbsmenuRegex = /<bbsmenu\s+([^>]+)\/?>/g;
+            const externalSources = [];
+            let menuMatch;
+            while ((menuMatch = bbsmenuRegex.exec(xmlText)) !== null) {
+                const attrs = menuMatch[1];
+                const srcMatch = /src="([^"]+)"/.exec(attrs);
+                const filterMatch = /filter="([^"]+)"/.exec(attrs);
+                if (srcMatch && srcMatch[1] !== 'default') {
+                    externalSources.push({
+                        url: srcMatch[1],
+                        filter: filterMatch ? filterMatch[1] : null
+                    });
+                }
+            }
+
+            // 3. 外部ソースの巡回フェッチ
+            for (const source of externalSources) {
+                try {
+                    log(`外部BBSMENUを取得中: ${source.url}`);
+                    const htmlText = await fetchBbsmenu(source.url);
+
+                    const anchorRegex = /<a\s+[^>]*href=(?:"([^"]*)"|'([^']*)'|([^>\s]+))[^>]*>([\s\S]*?)<\/a>/gi;
+                    let anchorMatch;
+                    const filterRegex = source.filter ? new RegExp(source.filter) : null;
+                    let subCount = 0;
+
+                    while ((anchorMatch = anchorRegex.exec(htmlText)) !== null) {
+                        const boardUrl = (anchorMatch[1] || anchorMatch[2] || anchorMatch[3] || '').trim();
+                        const title = anchorMatch[4].replace(/<[^>]*>/g, '').trim();
+
+                        if (!boardUrl) continue;
+                        if (
+                            boardUrl.includes('test/read.cgi') ||
+                            boardUrl.includes('wiki') ||
+                            boardUrl.includes('html') ||
+                            title.includes('■') ||
+                            title.includes('★') ||
+                            title.startsWith('2ch')
+                        ) {
+                            continue;
+                        }
+                        if (filterRegex && !filterRegex.test(boardUrl)) {
+                            continue;
+                        }
+
+                        let hostAndPath = boardUrl.replace(/^(?:https?:)?\/\//i, '');
+                        if (!hostAndPath.endsWith('/')) hostAndPath += '/';
+                        nameTblEntries.set(hostAndPath, title);
+                        subCount++;
+                    }
+                    log(`  -> ${source.url} から ${subCount} 件 同期に成功しました。`);
+                } catch (err) {
+                    log(`[Warning] ${source.url} の取得または解析に失敗しました: ${err.message}`);
+                }
+            }
+
+            if (nameTblEntries.size === 0) {
+                log('[Error] 有効な板名情報を1件も取得できませんでした。');
+                startButton.disabled = false;
+                return;
+            }
+
+            // 4. クラス版 boardtable.js コードの組み立て
+            const sortedKeys = Array.from(nameTblEntries.keys()).sort();
+            const entriesArray = sortedKeys.map(key => `\t\t\t"${key}": "${nameTblEntries.get(key)}"`).join(',\n');
+
+            const fullCode = `/**
+ * @file 掲示板の板名を管理します (ブラウザ簡易ツール自動生成)
+ * 生成日時: ${new Date().toLocaleString('ja-JP')}
+ */
+"use strict";
+
+/**
+ * 板情報や板URLの変換、板名対応テーブルを管理するクラスです。
+ */
+class BoardTableManager {
+    constructor() {
+        /**
+         * 掲示板のURLと板名の対応を定義します。
+         * Gulpの \`updateTable\` タスクによって自動更新されます。
+         * @type {Object<string, string>}
+         */
+        this.nameTbl = {
+            // [BEGIN_BOARD_TABLE]
+${entriesArray}
+            // [END_BOARD_TABLE]
+        };
+    }
+
+    /**
+     * 板URLから板名を取得します。
+     * @param {string} boardUrl 板URL
+     * @returns {string} 板名
+     */
+    getName(boardUrl) {
+        if (!boardUrl) return "(不明)";
+
+        const re = /^(?:https?:\\/\\/)?[^\\.]+\\.(.*)/;
+        const searchKey = boardUrl.replace(re, "$1").replace(/^[25]ch\\.(.*)/, "5ch.$1");
+
+        for (const key in this.nameTbl) {
+            if (Object.prototype.hasOwnProperty.call(this.nameTbl, key)) {
+                const normalizedKey = key.replace(re, "$1");
+                if (searchKey === normalizedKey) {
+                    return this.nameTbl[key];
+                }
+            }
+        }
+        return "(不明)";
+    }
+
+    /**
+     * スレッドURLから板URLに変換します。
+     * @param {string} url スレッドURL
+     * @returns {string} 板URL
+     */
+    getUrlByThread(url) {
+        if (!url) return "";
+
+        if (url.indexOf('test/read.cgi') !== -1) {
+            // 5chタイプのスレッド
+            return url.replace(/^(https?:\\/\\/[^\\/]+)\\/test\\/read\\.cgi\\/([^\\/]+)\\/.*/, "$1/$2/");
+        } else if (url.indexOf('bbs/read.cgi') !== -1) {
+            if (url.indexOf('jbbs.') !== -1) {
+                // したらば掲示板のスレッド(最初のドットまでは削除)
+                return url.replace(/^(https?:\\/\\/[^\\/]+)\\/bbs\\/read\\.cgi\\/([^\\/]+)\\/([^\\/]+)\\/.*/, "$1/$2/$3/");
+            } else {
+                // その他
+                return url.replace(/^(https?:\\/\\/[^\\/]+)\\/bbs\\/read\\.cgi\\/([^\\/]+)\\/.*/, "$1/$2/");
+            }
+        } else {
+            console.log(\`lego-ex-R:[ERROR]:Board:getUrlByThread(\${url}) Not thread!\`);
+            return url;
+        }
+    }
+}
+
+// 互換性維持と再ロード時エラー防止のための安全なマッピング
+// window への自動アタッチを保証するため、トップレベルは var を維持します
+var Board = new BoardTableManager();
+`;
+
+            outputArea.value = fullCode;
+            log(`[Success] 同期完了。総登録板数: ${nameTblEntries.size} 件。ステップ 3 のテキストボックスからコピーしてご使用ください。`);
+            startButton.disabled = false;
+        });
+    </script>
+</body>
+</html>
