@@ -272,8 +272,8 @@ var VerInfo = {
 	_skinURI: "http://smorgasbord.drwatson.nobody.jp/",
 	_skinMail: "\u0064\u0072\u0077\u0061\u0074\u0073\u006f\u006e\u002e\u0065\u0078\u0065\u002b\u0073\u006d\u006f\u0072\u0067\u0061\u0073\u0062\u006f\u0072\u0064\u0040\u0067\u006d\u0061\u0069\u006c\u002e\u0063\u006f\u006d",
 	//==== この派生スキンのバージョン情報 ====
-	_skinDerivedName: "smorgas lego-ex-R",
-	_skinDerivedVersion: "2018/05/22(ex-R) [ 2012/06/05(lego-ex) ベース ]",
+	_skinDerivedName: "smorgas lego-ex-R 改",
+	_skinDerivedVersion: "2026/06/6(ex-R) [ 2018/05/22(ex-R) ベース ]",
 	_skinDerivedDisclaimer: "※本スキンは派生版ですので、不具合等の連絡は本家作者様にしないで下さい"
 };
 
@@ -334,29 +334,38 @@ class SkinLog {
 var SKIN_LOGLVL = SkinLogLvl.WARNING;
 
 /**
- * ローカルストレージへのアクセスを扱います。
- * @namespace
+ * ローカルストレージへのアクセスを管理するクラス
  */
-// eslint-disable-next-line no-redeclare
-var Storage = {
-	log: new SkinLog("Storage", SkinLogLvl.WARNING),
-	/**
-	 * ローカルストレージオブジェクト
-	 * @type {Object}
-	 * @private
-	 */
-	_storage: null,
+class StorageManager {
+	constructor() {
+		/**
+		 * @type {SkinLog}
+		 * @private
+		 */
+		this.log = new SkinLog("Storage", SkinLogLvl.WARNING);
+		/**
+		 * ローカルストレージオブジェクト
+		 * @type {Object}
+		 * @private
+		 */
+		this._storage = null;
+		/**
+		 * ローカルストレージのオリジン
+		 * @type {string}
+		 */
+		this.origin = location.href.replace(/\/thread\/.+$/, "");
+	}
 	/**
 	 * エラーダイアログ（alert）を表示します。
 	 * @param {Object}	exception	キャッチした例外
 	 * @param {string}	message 	表示メッセージ（省略時はエラーダイアログを表示しません）
 	 * @private
 	 */
-	_showAlert(exception,message){
+	_showAlert(exception, message){
 		this.log.err(exception);
-		if(!message)return;
+		if(!message) return;
 		alert("logo-ex-R:[ERROR]:" + message);
-	},
+	}
 	/**
 	 * ストレージキーを取得します。
 	 * @param {string} name	項目名
@@ -365,26 +374,23 @@ var Storage = {
 	 */
 	_key(name){
 		return "lego-ex-R-" + name;
-	},
-	/**
-	 * ローカルストレージのオリジン
-	 * @type {string}	origin
-	 */
-	origin: location.href.replace(/\/thread\/.+$/, ""),
+	}
 	/**
 	 * ローカルストレージへのアクセスが可能か調べます。
 	 * @return {boolean} ローカルストレージへアクセス可能ならtrue、不可ならfalseを返します。
 	 */
 	init(){
-		try{ this._storage = localStorage; }
+		try{
+			this._storage = localStorage;
+		}
 		catch(e){
-			this._showAlert(e,"ストレージへアクセスできません\n" +
-			                  "「" + Storage.origin + "」サイトから送られてきた Cookie の保存を許可設定してください");
+			this._showAlert(e, "ストレージへアクセスできません\n" +
+			                  "「" + this.origin + "」サイトから送られてきた Cookie の保存を許可設定してください");
 			this._storage = null;
 		}
 		if(!this._storage) return false;
 		return true;
-	},
+	}
 	/**
 	 * ローカルストレージから指定データを読み出します。
 	 * @param {string}	name	項目名
@@ -393,11 +399,15 @@ var Storage = {
 	get(name){
 		let data = null;
 		if(this._storage){
-			try{ data = JSON.parse(this._storage.getItem(this._key(name))); }
-			catch(e){ this._showAlert(e,"ストレージからの読み出しでエラーが発生しました"); }
+			try{
+				data = JSON.parse(this._storage.getItem(this._key(name)));
+			}
+			catch(e){
+				this._showAlert(e, "ストレージからの読み出しでエラーが発生しました");
+			}
 		}
 		return data;
-	},
+	}
 	/**
 	 * ローカルストレージへデータを保存します。
 	 * @param {string}	name	項目名
@@ -405,39 +415,56 @@ var Storage = {
 	 */
 	set(name, data){
 		if(this._storage){
-			try{ this._storage.setItem(this._key(name), JSON.stringify(data)); }
-			catch(e){ this._showAlert(e,"ストレージへの書き込みでエラーが発生しました"); }
+			try{
+				this._storage.setItem(this._key(name), JSON.stringify(data));
+			}
+			catch(e){
+				this._showAlert(e, "ストレージへの書き込みでエラーが発生しました");
+			}
 		}
-	},
+	}
 	/**
 	 * ローカルストレージから指定データを削除する。
 	 * @param {string} name	項目名
 	 */
 	remove(name){
-		try{ this._storage.removeItem(this._key(name)); }
-		catch(e){ this._showAlert(e,"ストレージのデータの削除でエラーが発生しました."); }
+		try{
+			this._storage.removeItem(this._key(name));
+		}
+		catch(e){
+			this._showAlert(e, "ストレージのデータの削除でエラーが発生しました.");
+		}
 	}
-};
+}
+// eslint-disable-next-line no-redeclare
+var Storage = new StorageManager();
 
 /**
- * インポート/エクスポート機能を扱う。
- * @namespace
+ * インポート/エクスポート機能を扱うクラス
  */
-var Backup = {
-	log: new SkinLog("Backup", SkinLogLvl.WARNING),
-	/**
-	 * インポート/エクスポートの一時データ
-	 * @type {Object}
-	 */
-	_tempData: null,
-	/**
-	 * エクスポートするデータのJSONを出力したファイルのオブジェクトURL
-	 * @type {DOMString}
-	 */
-	_objectURL: null,
+class BackupManager {
+	constructor() {
+		/**
+		 * @type {SkinLog}
+		 * @private
+		 */
+		this.log = new SkinLog("Backup", SkinLogLvl.WARNING);
+		/**
+		 * インポート/エクスポートの一時データ
+		 * @type {Object}
+		 * @private
+		 */
+		this._tempData = null;
+		/**
+		 * エクスポートするデータのJSONを出力したファイルのオブジェクトURL
+		 * @type {DOMString}
+		 * @private
+		 */
+		this._objectURL = null;
+	}
 	/**
 	 * 含まれているデータをチェックします。
-	 * @return {Object}		pref, mypost, bookmarkの判定結果をオブジェクトで返す すべて含まれていない場合は null
+	 * @return {Object|null}		pref, mypost, bookmarkの判定結果をオブジェクトで返す すべて含まれていない場合は null
 	 */
 	checkData(){
 		const fn = "checkData()";
@@ -452,7 +479,7 @@ var Backup = {
 		check.bookmark = ("valueBookmarkIndex" in this._tempData);
 		if(!check.pref && !check.mypost && !check.bookmark) return null;
 		return check;
-	},
+	}
 	/**
 	 * JSON形式のファイルを読み込みます。
 	 * @param {File}	file	指定されたエキスポートファイル
@@ -461,8 +488,8 @@ var Backup = {
 	readFile(file){
 		const fn = "readFile(" + file.name + ")";
 		this.log.info(fn);
-		return new Promise((resoluve, reject) => {
-			const reader =  new FileReader();
+		return new Promise((resolve, reject) => {
+			const reader = new FileReader();
 			reader.onload = (e) => {
 				// 読込完了
 				const text = e.target.result;
@@ -475,7 +502,7 @@ var Backup = {
 						this._tempData = null;
 						reject("NotExportFile");
 					}else{
-						resoluve(check);
+						resolve(check);
 					}
 				}
 				catch(err){
@@ -492,7 +519,7 @@ var Backup = {
 			};
 			reader.readAsText(file);
 		});
-	},
+	}
 	/**
 	 * 指定されたインポートデータをローカルストレージに反映します。
 	 * @param {Object}	select	反映するデータ種別の指定
@@ -521,7 +548,7 @@ var Backup = {
 		if(select.pref){
 			SkinPref.load();
 		}
-	},
+	}
 	/**
 	 * 指定したデータからJSON形式のエクスポートファイルのオブジェクトを作成してURLを返します。
 	 * @param  {Object}		select	出力するデータ種別の指定
@@ -550,7 +577,7 @@ var Backup = {
 		const blob = new Blob([ jsonStr ], { "type":"application/x-msdownload" });
 		this._objectURL = window.URL.createObjectURL(blob);
 		return this._objectURL;
-	},
+	}
 	/**
 	 * エクスポートファイルを開放します。
 	 */
@@ -563,19 +590,35 @@ var Backup = {
 			this._objectURL = null;
 		}
 	}
-};
+}
+var Backup = new BackupManager();
 
 /**
- * スキン設定を扱う。
- * @namespace
+ * スキン設定を管理するクラス
  */
-var SkinPref = {
-	log: new SkinLog("SkinPref", SkinLogLvl.WARNING),
-
-	_storage: null,
-	_pref: null,
-	_update: false,
-
+class SkinPrefManager {
+	constructor() {
+		/**
+		 * @type {SkinLog}
+		 * @private
+		 */
+		this.log = new SkinLog("SkinPref", SkinLogLvl.WARNING);
+		/**
+		 * @type {StorageManager}
+		 * @private
+		 */
+		this._storage = null;
+		/**
+		 * @type {Object}
+		 * @private
+		 */
+		this._pref = null;
+		/**
+		 * @type {boolean}
+		 * @private
+		 */
+		this._update = false;
+	}
 	/**
 	 * 初期処理を行います。
 	 * @return {boolean}	ストレージ有効なら true 無効なら false を返します。
@@ -588,14 +631,14 @@ var SkinPref = {
 		}else{
 			return false;
 		}
-	},
+	}
 	/**
 	 * スキン設定を読み込みます。
 	 */
 	load(){
 		let pref = null;
 		this.log.info("load()");
-		if(!SysPref.disableStorage){
+		if(!SysPref.disableStorage && this._storage){
 			pref = this._storage.get("pref");
 		}
 		if(pref){
@@ -625,7 +668,7 @@ var SkinPref = {
 		}
 		this._pref = pref;
 		this._update = false;
-	},
+	}
 	/**
 	 * 指定した設定項目の値を取得します。
 	 * @param {string} name	項目名
@@ -643,7 +686,7 @@ var SkinPref = {
 		}
 		this.log.dbg("get(" + name + ") = " + val);
 		return val;
-	},
+	}
 	/**
 	 * 指定した設定項目に値を設定します。
 	 * @param {string} name	項目名
@@ -657,11 +700,9 @@ var SkinPref = {
 			if(name in ReloadPref) this._update = true;
 			this._pref[name] = val;
 		}
-	},
+	}
 	/**
 	 * スキン設定を保存します。
-	 * @param {string} name	項目名
-	 * @param {number|string|boolean}	val		値
 	 * @return {boolean} リロードが必要な変更があったか
 	 */
 	save(){
@@ -669,22 +710,26 @@ var SkinPref = {
 			return false;
 		}else{
 			this.log.info("save()");
-			this._storage.set("pref", this._pref);
+			if(this._storage){
+				this._storage.set("pref", this._pref);
+			}
 			return this._update;
 		}
-	},
+	}
 	/**
 	 * スキン設定を初期化します。ローカルストレージの設定値データを削除し初期値を展開します。
 	 */
 	clear(){
 		this.log.info("clear()");
-		if(SysPref.disableStorage){
+		if(!SysPref.disableStorage && this._storage){
 			this._storage.remove("pref");
 		}
 		this._pref = JSON.parse(JSON.stringify(InitPref));
 		this._update = false;
 	}
-};
+}
+var SkinPref = new SkinPrefManager();
+
 SkinPref.init();
 SkinPref.load();
 
