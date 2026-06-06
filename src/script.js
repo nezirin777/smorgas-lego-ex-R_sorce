@@ -1264,7 +1264,7 @@ class ThreadDocumentManager {
 		if(startIndex > 2) this.asyncInsert(2, startIndex - 1, true, true);
 		if(endIndex < this.countAll) this.asyncInsert(endIndex + 1, this.countAll, false, true);
 	}
-	/**
+  /**
 	 * 更新をチェックし新着レスがあれば挿入します。
 	 */
 	reload(noScroll, background){
@@ -1308,15 +1308,23 @@ class ThreadDocumentManager {
 				Nodes.content.appendChild(newDiv);
 				return;
 			}
+
+			// 新着要素の純粋な個数をカウント
 			const newres = newItems.length - 1;
+
+			// 取得した最後尾のレス要素から、実際のレス番号を数値として安全に取得
+			const lastItem = newItems[newItems.length - 1];
+			const lastResNum = lastItem ? parseInt(lastItem.getAttribute("res"), 10) : NaN;
+
 			if(!background){
-				this.countRead   = this.countAll;
+				this.countRead   = isNaN(lastResNum) ? this.countAll : (lastResNum - newres);
 				this.countUnread = newres;
 			}else{
 				this.countUnread += newres;
 			}
 
-			this.countAll = this.countRead + this.countUnread;
+			// 単純な要素数の足し算ではなく、最後尾の実際のレス番号を countAll に代入 (取得できない場合は安全にフォールバック)
+			this.countAll = isNaN(lastResNum) ? (this.countRead + this.countUnread) : lastResNum;
 			this.setStatus(true);
 
 			const newDiv = _doc.createElement("div");
@@ -1339,6 +1347,7 @@ class ThreadDocumentManager {
 			this.log.err(fn + ":" + e.message);
 		});
 	}
+
 	/**
 	 * 指定されたレスまでスクロールします。
 	 */
