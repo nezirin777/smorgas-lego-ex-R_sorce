@@ -1,26 +1,34 @@
 <!DOCTYPE html>
 <html>
+
 <head>
-<meta charset="Shift_JIS">
-<title>niconico douga</title>
-<script type="application/javascript">
-	if(location.href.match(/.+\?url=(.+)/)){
-		var url = RegExp.$1;
-		window.addEventListener("resize", e => {
-			const embed = document.getElementsByTagName("embed");
-			if(!!embed){
-				const element = document.documentElement;
-				const style = embed[0].style;
-				style.width = element.clientWidth + "px";
-				style.height = element.clientHeight + "px";
-			}
-		}, false);
-	}
-</script>
+  <meta charset="Shift_JIS">
+  <title>niconico douga</title>
+  <script type="application/javascript">
+    // グローバルに安全な初期値をセット
+    window.url = null;
+
+    if (location.href.match(/.+\?url=(.+)/)) {
+      window.url = RegExp.$1;
+      window.addEventListener("resize", e => {
+        const embed = document.getElementsByTagName("embed");
+        if (embed && embed.length > 0) {
+          const element = document.documentElement;
+          const style = embed[0].style;
+          style.width = element.clientWidth + "px";
+          style.height = element.clientHeight + "px";
+        }
+      }, false);
+    }
+  </script>
 </head>
+
 <body style="margin:0;">
-<script type="application/javascript">
-	if(!!url) document.write('<script type="application/javascript" src="' + url + '"></scrip'+'t>');
-</script>
+  <script type="application/javascript">
+    if (window.url) {
+      document.write('<script type="application/javascript" src="' + window.url + '"></scrip' + 't>');
+    }
+  </script>
 </body>
+
 </html>

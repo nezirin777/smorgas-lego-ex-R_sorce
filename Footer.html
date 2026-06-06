@@ -2,21 +2,24 @@
 
 <span id="moremoreInfo"></span>
 <div id="div-clipboard" height="0" width="0" style="position: absolute;"></div>
-<div id="footer" status="<STATUS/>" getres="<GETRESCOUNT/>" newres="<NEWRESCOUNT/>" allres="<ALLRESCOUNT/>" size="<SIZEKB/>" skinpath="<SKINPATH/>"></div>
+<div id="footer" status="<STATUS/>" getres="<GETRESCOUNT/>" newres="<NEWRESCOUNT/>" allres="<ALLRESCOUNT/>"
+  size="<SIZEKB/>" skinpath="<SKINPATH/>"></div>
 <script type="application/javascript" nonce="<NONCE/>">
-<!--
-((ft) => {
-	var filename = "script.js";
-	if(ft.getAttribute("getres") === "0" && ft.getAttribute("newres") === "0" && ft.getAttribute("allres") === "0"){
-		filename = "error.js";
-	}
-	var oScript = document.createElement("script");
-	oScript.type = "application/javascript";
-  oScript.charset = "UTF-8";
-	oScript.src = "<SKINPATH/>" + filename;
-	document.body.appendChild(oScript);
-})(document.getElementById("footer"));
--->
+  ((ft) => {
+    if (!ft) return; // 安全ガード
+
+    let filename = "script.js";
+    if (ft.getAttribute("getres") === "0" && ft.getAttribute("newres") === "0" && ft.getAttribute("allres") === "0") {
+      filename = "error.js";
+    }
+    const oScript = document.createElement("script");
+    oScript.type = "application/javascript";
+    oScript.charset = "UTF-8"; // JSファイル自体のデコード用にこれはUTF-8のままでOK
+    const skinPath = ft.getAttribute("skinpath") || "";
+    oScript.src = skinPath + filename;
+    document.body.appendChild(oScript);
+  })(document.getElementById("footer"));
 </script>
 </body>
+
 </html>

@@ -1,70 +1,92 @@
 <!-- chaika-version: 1.9.1 /** @file Header.html */ -->
 <html>
-<head>
-<title><THREADNAME/></title>
-<style type="text/css">
-	body {font:<FONTSIZE/> <FONTNAME/>}
-	.aaRes {display:inline-block; font:<AAFONTSIZE/> <AAFONTNAME/>; line-height:<AALINEHEIGHT/>}
-</style>
-<script type="application/javascript" src="<SKINPATH/>options.js"></script>
-<script type="application/javascript" src="<SKINPATH/>boardtable.js"></script>
-<link rel="icon" type="image/png" href="<SKINPATH/>img/favicon/favicon.png" />
-</head>
-<body>
-<div id="popupdummy"></div>
-<div id="header" serverurl="<SERVERURL/>" boardurl="<BOARDURL/>" threadurl="<THREADURL/>" skinpath="<SKINPATH/>">
-	<h1>
-		<a href="chaika://board/<BOARDURL/>" id="boardName" title="ã‚¹ãƒ¬ãƒƒãƒ‰ä¸€è¦§ã‚’è¡¨ç¤º"></a>
-		<span id="threadName" title="<THREADNAME/>"><THREADNAME/></span>
-		<span id="resCount"></span>
-		<span id="statusText" class="throbber" accesskey="L" title="æ–°ç€ãƒ¬ã‚¹ã¸ç§»å‹•"></span>
-		<span id="datSize"></span>
-	</h1>
-	<span id="command">
-		<ul>
-			<li id="autoReload" title="è‡ªå‹•æ›´æ–°On/Off"></li>
-			<li id="autoScroll" class="scrolloff" title="ã‚ªãƒ¼ãƒˆã‚¹ã‚¯ãƒ­ãƒ¼ãƒ«"></li>
-			<li id="threadMenu" class="div">
-			<select size="1" id="reloadMenu">
-				<option value="l50">Last 50
-				<option value="">ALL
-				<option value="input">Select
-				<option value="1-10">1-10
-				<option value="1-25">1-25
-				<option value="X" selected>Jump to
-			</select>
-			</li>
-			<li id="goPrev" class="div" title="å‰ã¸"></li>
-			<li id="showAll" class="div" title="ã™ã¹ã¦è¡¨ç¤º"><span id="showAllText">ã™ã¹ã¦è¡¨ç¤º</span></li>
-			<li id="writeTo" class="div" title="æ›¸ãè¾¼ã‚€"><span id="writeToText">æ›¸ãè¾¼ã‚€</span></li>
-			<li id="find" title="æ¤œç´¢/æŠ½å‡º"><span id="findText">æ¤œç´¢</span></li>
-			<li id="chevron"><span id="chevronText">&gt;&gt;&nbsp;</span>&nbsp;</li>
-		</ul>
-	</span>
-	<div id="findbox"><div><div><div><div>
-		<div id="findboxClear"><input type="text" id="findboxText"></input></div>
-		<select id="findObject">
-			<option value="resOrg">æ¤œç´¢å¯¾è±¡</option>
-			<option value="resBody">ãƒ¬ã‚¹æœ¬æ–‡</option>
-			<option value="resNumber">ãƒ¬ã‚¹ç•ªå·</option>
-			<option value="resName">åå‰æ¬„</option>
-			<option value="resMail">ãƒ¡ãƒ¼ãƒ«æ¬„</option>
-			<option value="resDate">æ—¥ä»˜</option>
-			<option value="resID">ID</option>
-			<option value="resBeID">BeID</option>
-		</select>
-		<select id="findContent">
-			<option value="in" selected>ã‚’å«ã‚€</option>
-			<option value="out">ã‚’å«ã¾ãªã„</option>
-		</select>
-		<select id="findShow">
-			<option value="only" selected>æŠ½å‡º</option>
-			<option value="mark">å¼·èª¿</option>
-		</select>
-		<input type="checkbox" valign="center" id="findStrong">åè»¢
-	</div></div></div></div></div>
-</div>
-<div id="showBar" title="ãƒ˜ãƒƒãƒ€è¡¨ç¤º"><span id="showBarText">â–¼</span></div>
-<div id="TemplateBody"></div>
 
-<div id="content">
+<head>
+  <meta charset="Shift_JIS">
+<title>
+  <THREADNAME />
+</title>
+  <style type="text/css">
+    body {
+      font: <FONTSIZE/> <FONTNAME/>
+    }
+
+    .aaRes {
+      display: inline-block;
+      font: <AAFONTSIZE/> <AAFONTNAME/>;
+      line-height: <AALINEHEIGHT/>
+    }
+  </style>
+  <script type="application/javascript" src="<SKINPATH/>options.js"></script>
+  <script type="application/javascript" src="<SKINPATH/>boardtable.js"></script>
+  <link rel="icon" type="image/png" href="<SKINPATH/>img/favicon/favicon.png" />
+</head>
+
+<body>
+  <div id="popupdummy"></div>
+  <div id="header" serverurl="<SERVERURL/>" boardurl="<BOARDURL/>" threadurl="<THREADURL/>" skinpath="<SKINPATH/>">
+    <h1>
+      <a href="chaika://board/<BOARDURL/>" id="boardName" title="ƒXƒŒƒbƒhˆê——‚ğ•\¦"></a>
+      <span id="threadName" title="<THREADNAME/>">
+        <THREADNAME />
+      </span>
+      <span id="resCount"></span>
+      <span id="statusText" class="throbber" accesskey="L" title="V’…ƒŒƒX‚ÖˆÚ“®"></span>
+      <span id="datSize"></span>
+    </h1>
+    <span id="command">
+      <ul>
+        <li id="autoReload" title="©“®XVOn/Off"></li>
+        <li id="autoScroll" class="scrolloff" title="ƒI[ƒgƒXƒNƒ[ƒ‹"></li>
+        <li id="threadMenu" class="div">
+          <select size="1" id="reloadMenu">
+            <option value="l50">Last 50
+            <option value="">ALL
+            <option value="input">Select
+            <option value="1-10">1-10
+            <option value="1-25">1-25
+            <option value="X" selected>Jump to
+          </select>
+        </li>
+        <li id="goPrev" class="div" title="‘O‚Ö"></li>
+        <li id="showAll" class="div" title="‚·‚×‚Ä•\¦"><span id="showAllText">‚·‚×‚Ä•\¦</span></li>
+        <li id="writeTo" class="div" title="‘‚«‚Ş"><span id="writeToText">‘‚«‚Ş</span></li>
+        <li id="find" title="ŒŸõ/’Šo"><span id="findText">ŒŸõ</span></li>
+        <li id="chevron"><span id="chevronText">&gt;&gt;&nbsp;</span>&nbsp;</li>
+      </ul>
+    </span>
+    <div id="findbox">
+      <div>
+        <div>
+          <div>
+            <div>
+              <div id="findboxClear"><input type="text" id="findboxText"></input></div>
+              <select id="findObject">
+                <option value="resOrg">ŒŸõ‘ÎÛ</option>
+                <option value="resBody">ƒŒƒX–{•¶</option>
+                <option value="resNumber">ƒŒƒX”Ô†</option>
+                <option value="resName">–¼‘O—“</option>
+                <option value="resMail">ƒ[ƒ‹—“</option>
+                <option value="resDate">“ú•t</option>
+                <option value="resID">ID</option>
+                <option value="resBeID">BeID</option>
+              </select>
+              <select id="findContent">
+                <option value="in" selected>‚ğŠÜ‚Ş</option>
+                <option value="out">‚ğŠÜ‚Ü‚È‚¢</option>
+              </select>
+              <select id="findShow">
+                <option value="only" selected>’Šo</option>
+                <option value="mark">‹­’²</option>
+              </select>
+              <input type="checkbox" valign="center" id="findStrong">”½“]
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div id="showBar" title="ƒwƒbƒ_•\¦"><span id="showBarText">¥</span></div>
+  <div id="TemplateBody"></div>
+
+  <div id="content">

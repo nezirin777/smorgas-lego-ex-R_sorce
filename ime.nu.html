@@ -1,16 +1,33 @@
 <!DOCTYPE html>
-<head>
-<meta charset="SHIFT_JIS">
-<title>ime.nu.html</title>
 <html>
-<script type="application/javascript">
-	if(location.href.match(/\?url=.*?&b64url=/)){
-		var url = atob(RegExp.rightContext);
-	}else if(location.href.match(/\?url=/)){
-		var url = RegExp.rightContext;
-	}
-	document.open();
-	document.write('<meta http-equiv="refresh" content="0;url=' + url + '">');
-	document.close();
-</script>
+
+<head>
+  <meta charset="Shift_JIS">
+  <title>ime.nu.html</title>
+  <script type="application/javascript">
+    (() => {
+      let url = "";
+      if (location.href.match(/\?url=.*?&b64url=/)) {
+        try {
+          url = atob(RegExp.rightContext);
+        } catch (e) {
+          // デコード失敗時はフォールバック
+          url = RegExp.rightContext;
+        }
+      } else if (location.href.match(/\?url=/)) {
+        url = RegExp.rightContext;
+      }
+
+      if (url) {
+        document.open();
+        document.write('<meta http-equiv="refresh" content="0;url=' + url + '">');
+        document.close();
+      }
+    })();
+  </script>
+</head>
+
+<body>
+</body>
+
 </html>
