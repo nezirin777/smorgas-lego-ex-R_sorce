@@ -336,7 +336,7 @@ var SKIN_LOGLVL = SkinLogLvl.WARNING;
 /**
  * ローカルストレージへのアクセスを管理するクラス
  */
-class StorageManager {
+class SkinStorageManager {
 	constructor() {
 		/**
 		 * @type {SkinLog}
@@ -437,7 +437,8 @@ class StorageManager {
 	}
 }
 // eslint-disable-next-line no-redeclare
-var Storage = new StorageManager();
+var Storage = new SkinStorageManager();
+
 
 /**
  * インポート/エクスポート機能を扱うクラス
