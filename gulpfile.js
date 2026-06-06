@@ -16,12 +16,11 @@ const babel = require('gulp-babel');
 const cleanCSS = require('gulp-clean-css');
 const open = require('gulp-open');
 
-// 共通パス定義
+// 共通パス定義 (HTMLをビルド対象から完全に除外)
 const PATHS = {
     src: {
         js: './src/*.js',
-        css: './src/*.css',
-        html: './*.html'
+        css: './src/*.css'
     },
     dist: './dist',
     tmp: './tmp',
@@ -155,7 +154,7 @@ const buildJs = () => {
         }))
         .pipe(babel(babelOptions))
         .pipe(plumber.stop())
-        .gulp.dest(PATHS.dist);
+        .pipe(gulp.dest(PATHS.dist));
 };
 
 // 開発用コピー
@@ -182,12 +181,6 @@ const buildCss = () => {
         .pipe(gulp.dest(PATHS.dist));
 };
 
-// HTMLコピー
-const copyHtml = () => {
-    return gulp.src(PATHS.src.html)
-        .pipe(gulp.dest(PATHS.dist));
-};
-
 // JSファイルへのBOM付加
 const addBomToDist = async () => {
     if (!fs.existsSync(PATHS.dist)) return;
@@ -206,9 +199,6 @@ const addBomToDist = async () => {
     }
 };
 
-// ----------------------------------------------------------------------
-// boards.xml から全ての板名を完全パース・同期するタスク
-// ----------------------------------------------------------------------
 // ----------------------------------------------------------------------
 // boards.xml から全ての板名を完全パース・同期するタスク
 // ----------------------------------------------------------------------
@@ -333,7 +323,7 @@ const updateBoardTableFromXml = async () => {
 
     // 4. boardtable.js を読み込み、マーカー間の定義データ部分のみをインプレース置換
     if (!fs.existsSync(PATHS.targetTable)) {
-        throw new Error(`[Error] 置換対象の ${PATHS.targetTable} が見つかりません。`);
+        throw new Error(`[Error] 置換対象 of ${PATHS.targetTable} が見つかりません。`);
     }
 
     let boardTableContent = fs.readFileSync(PATHS.targetTable, 'utf-8');
@@ -351,20 +341,20 @@ const updateBoardTableFromXml = async () => {
     console.log(`[Success] ${PATHS.targetTable} の定義データ部を自動更新しました。登録板数: ${nameTblEntries.size}件 (個別板・外部ソース統合済)`);
 };
 
-// ------------------------------------------------------------
-// 統合・配備タスク exports
+// ----------------------------------------------------------------------
+// 統合・配備タスク exports (HTMLコピーを完全に除外)
 // ----------------------------------------------------------------------
 
 const build = gulp.series(
     cleanDist,
     lint,
-    gulp.parallel(buildJs, buildCss, copyHtml)
+    gulp.parallel(buildJs, buildCss)
 );
 
 const dev = gulp.series(
     cleanDist,
     lint,
-    gulp.parallel(devJs, buildCss, copyHtml)
+    gulp.parallel(devJs, buildCss)
 );
 
 const dist = gulp.series(addBomToDist, async () => {
