@@ -11,30 +11,40 @@
 var _doc = document;
 
 /**
- * XMLHTTPRequestでファイルやスレッドをchaikaから非同期で取得します。
- * @param {string}		url		リクエストするURL
- * @param {boolean}		[force]	強制取得（ファイルやスレを無条件に全取得する場合にtrue）
- * @return {Promise}	Promiseオブジェクト
+ * ネットワークリクエストを制御する静的ユーティリティクラス
+ */
+class Http {
+	/**
+	 * 指定URLからリソースを非同期でテキストとして取得します。
+	 * @param {string}		url		リクエストするURL
+	 * @param {boolean}		[force]	強制取得（キャッシュを無視する場合にtrue）
+	 * @return {Promise<string>}	レスポンスのテキストを解決するPromise
+	 */
+	static get(url, force) {
+		const options = {};
+		if(typeof force !== "undefined" && force){
+			options.headers = {
+				"If-Modified-Since": "Wed, 15 Nov 1995 00:00:00 GMT"
+			};
+		}
+
+		return fetch(url, options)
+			.then(response => {
+				if(response.ok){
+					return response.text();
+				}
+				throw new Error(response.statusText || `HTTP error! status: ${response.status}`);
+			});
+	}
+}
+
+/**
+ * 後方互換性のためのグローバルラッパー関数。
+ * 既存の他モジュールや巨大スクリプトの呼び出し箇所を破壊しないために維持します。
+ * @deprecated 新しいコードでは直接 Http.get(url, force) を利用してください。
  */
 function AjaxGet(url, force){
-	return new Promise((resolve, reject) => {
-		const xhr = new XMLHttpRequest();
-		xhr.open("GET", url, true);
-		if(typeof force !== "undefined" && force){
-			xhr.setRequestHeader("If-Modified-Since", "Wed, 15 Nov 1995 00:00:00 GMT");
-		}
-		xhr.onload = () => {
-			if(xhr.readyState === 4 && xhr.status === 200){
-				resolve(xhr.response);
-			}else{
-				reject(new Error(xhr.statusText));
-			}
-		};
-		xhr.onerror = () => {
-			reject(new Error(xhr.statusText));
-		};
-		xhr.send(null);
-	});
+	return Http.get(url, force);
 }
 
 // ダイアログ
@@ -42,7 +52,7 @@ var OptionsDialog = null;
 var AnalyseDialog = null;
 
 /**
- * スタイルシートを動的に作成します。
+ * スタイルシートを動的に作成・制御します。
  */
 // eslint-disable-next-line no-redeclare
 class StyleSheet {
@@ -51,12 +61,12 @@ class StyleSheet {
 	 * @param {string}	id	スタイルシートのID
 	 */
 	constructor(id){
-		let style = document.getElementById(id);
+		let style = _doc.getElementById(id);
 		if(!style){
 			style = _doc.createElement("style");
 			style.type = "text/css";
 			style.id = id;
-			(_doc.head || _doc.getElementsByTagName("head")[0]).appendChild(style);
+			(_doc.head ?? _doc.getElementsByTagName("head")[0]).appendChild(style);
 		}
 		this._style = style;
 	}
@@ -64,20 +74,21 @@ class StyleSheet {
 	 * スタイルシートを削除します。
 	 */
 	remove(){
-		this._style.parentNode.removeChild(this._style);
+		this._style.parentNode?.removeChild(this._style);
 	}
 	/**
 	 * スタイルルールを挿入します。
 	 * @param {string} rule		CSSルール
 	 */
 	insert(rule){
-		this._style.sheet.insertRule(rule, 0);
+		this._style.sheet?.insertRule(rule, 0);
 	}
 	/**
 	 * スタイルルールを全消去します。
 	 */
 	clear(){
 		const sheet = this._style.sheet;
+		if(!sheet) return;
 		const l = sheet.cssRules.length;
 		for(let i = l - 1; i >= 0; i--){
 			sheet.deleteRule(i);
@@ -85,14 +96,16 @@ class StyleSheet {
 	}
 }
 
+
 /**
  * 表示範囲の指定に従ってスレッドをリロードします。
  */
 function ReloadThread(){
 	const log = new SkinLog("", SkinLogLvl.WARNING);
-	const fn = "ReloadThread()"
+	const fn = "ReloadThread()";
 	log.info(fn);
 	const r = _doc.getElementById("reloadMenu");
+	if (!r) return;
 	const v = r.value;
 	if(v === "X") return;
 
@@ -109,195 +122,208 @@ function ReloadThread(){
 	}
 }
 
+
 /**
- * DOM 操作のために、スキンの静的なノードを格納して管理します。
- * @namespace
+ * DOM 操作のために、スキンの静的なノードを格納して管理するクラス
  */
-var Nodes = {
-	_content: null,
+class NodesManager {
+	constructor() {
+		/**
+		 * 静的ノードのキャッシュ
+		 * @type {Element}
+		 * @private
+		 */
+		this._content = null;
+	}
 	/**
 	 * ヘッダ部
 	 * @type {Element}
 	 */
-	get header(){ return _doc.getElementById("header"); },
+	get header(){ return _doc.getElementById("header"); }
 	/**
 	 * フッタ部
 	 * @type {Element}
 	 */
-	get footer(){ return _doc.getElementById("footer"); },
+	get footer(){ return _doc.getElementById("footer"); }
 	/**
 	 * スレッド表示の上端y座標
 	 * @type {number}
 	 */
-	get threadViewTop(){ return this.header.offsetTop + this.header.offsetHeight; },
+	get threadViewTop(){
+		const hd = this.header;
+		return hd ? (hd.offsetTop + hd.offsetHeight) : 0;
+	}
 	/**
 	 * ヘッダ部の右側のコマンドバー
 	 * @type {Element}
 	 */
-	get command(){ return _doc.getElementById("command"); },
+	get command(){ return _doc.getElementById("command"); }
 	/**
 	 * 検索/抽出ボックス
 	 * @type {Element}
 	 */
-	get findBox(){ return _doc.getElementById("findbox"); },
+	get findBox(){ return _doc.getElementById("findbox"); }
 	/**
 	 * 検索/抽出ボックスのテキストボックス
 	 * @type {Element}
 	 */
-	get findBoxText(){ return _doc.getElementById("findboxText"); },
+	get findBoxText(){ return _doc.getElementById("findboxText"); }
 	/**
 	 * レス数
 	 * @type {Element}
 	 */
-	get resCount(){ return _doc.getElementById("resCount"); },
+	get resCount(){ return _doc.getElementById("resCount"); }
 	/**
 	 * ステータス表示
 	 * @type {Element}
 	 */
-	get statusText(){ return _doc.getElementById("statusText"); },
+	get statusText(){ return _doc.getElementById("statusText"); }
 	/**
 	 * DAT サイズ
 	 * @type {Element}
 	 */
-	get datSize(){ return _doc.getElementById("datSize"); },
+	get datSize(){ return _doc.getElementById("datSize"); }
 	/**
 	 * スレッドタイトル
 	 * @type {Element}
 	 */
-	get threadName(){ return _doc.getElementById("threadName"); },
+	get threadName(){ return _doc.getElementById("threadName"); }
 	/**
 	 * 板の名称
 	 * @type {Element}
 	 */
-	get boardName(){ return _doc.getElementById("boardName"); },
+	get boardName(){ return _doc.getElementById("boardName"); }
 	/**
 	 * 検索対象（レス本文/レス番号/名前欄/メール欄/日付/ID/BeID）のセレクトボックス
 	 * @type {Element}
 	 */
-	get findObject(){ return _doc.getElementById("findObject"); },
+	get findObject(){ return _doc.getElementById("findObject"); }
 	/**
 	 * 検索条件（を含む/を含まない）のセレクトボックス
 	 * @type {Element}
 	 */
-	get findContent(){ return _doc.getElementById("findContent"); },
+	get findContent(){ return _doc.getElementById("findContent"); }
 	/**
 	 * 表示指定（抽出/強調）のセレクトボックス
 	 * @type {Element}
 	 */
-	get findShow(){ return _doc.getElementById("findShow"); },
+	get findShow(){ return _doc.getElementById("findShow"); }
 	/**
 	 * 反転指定のチェックボックス
 	 * @type {Element}
 	 */
-	get findStrong(){ return _doc.getElementById("findStrong"); },
+	get findStrong(){ return _doc.getElementById("findStrong"); }
 	/**
 	 * 自動更新の状態表示
 	 * @type {Element}
 	 */
-	get reloadInfo(){ return _doc.getElementById("moremoreInfo"); },
+	get reloadInfo(){ return _doc.getElementById("moremoreInfo"); }
 	/**
 	 * 既読レスと新着レスとの境界
 	 * @type {Element}
 	 */
-	get newMark(){ return _doc.getElementById("NewMark"); },
+	get newMark(){ return _doc.getElementById("NewMark"); }
 	/**
 	 * スレッド表示のルート
 	 * @type {Element}
 	 */
-	get content(){ return (!this._content) ? (this._content = _doc.getElementById("content")) : this._content; },
+	get content(){ return (!this._content) ? (this._content = _doc.getElementById("content")) : this._content; }
 	/**
 	 * ポップアップ表示のルート
 	 * @type {Element}
 	 */
-	get popupRoot(){ return _doc.getElementById("popupdummy"); },
+	get popupRoot(){ return _doc.getElementById("popupdummy"); }
 	/**
 	 * 指定のレス番号のレスを取得します。
 	 * @param {number}		resNum	レス番号
 	 * @return {Element}	レス要素
 	 */
-	getRes(resNum){ return _doc.getElementById("res" + resNum); },
+	getRes(resNum){ return _doc.getElementById("res" + resNum); }
 	/**
 	 * 指定のレス要素内のレスヘッダ要素を取得します。
 	 * @param {Element}		node	レス要素
 	 * @return {Element}	レスヘッダ要素
 	 */
-	getResHeader(node){ return node.children[0]; },
+	getResHeader(node){ return node?.children[0] || null; }
 	/**
 	 * 指定のレス要素内のレス本文要素を取得します。
 	 * @param {Element}		node	レス要素
 	 * @return {Element}	レス本文要素
 	 */
-	getResBody(node){ return node.children[1]; },
+	getResBody(node){ return node?.children[1] || null; }
 	/**
 	 * 指定のレス要素内の名前欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	名前欄要素
 	 */
-	getResName(resHeader){ return resHeader.children[1]; },
+	getResName(resHeader){ return resHeader?.children[1] || null; }
 	/**
 	 * 指定のレス要素内のメール欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	メール欄要素
 	 */
-	getResMail(resHeader){ return resHeader.children[2]; },
+	getResMail(resHeader){ return resHeader?.children[2] || null; }
 	/**
 	 * 指定のレス要素内の日付欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	日付欄要素
 	 */
-	getResDate(resHeader){ return resHeader.children[3]; },
+	getResDate(resHeader){ return resHeader?.children[3] || null; }
 	/**
 	 * 指定のレス要素内のID欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	ID欄要素
 	 */
-	getResID(resHeader){ return resHeader.children[4]; },
+	getResID(resHeader){ return resHeader?.children[4] || null; }
 	/**
 	 * 指定のレス要素内のBeID欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	BeID欄要素
 	 */
-	getResBeID(resHeader){ return resHeader.children[5]; },
+	getResBeID(resHeader){ return resHeader?.children[5] || null; }
 	/**
 	 * 指定のレス要素内のIDアイコン要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	IDアイコン要素
 	 */
-	getResIDIcon(resHeader){ return resHeader.children[6]; },
+	getResIDIcon(resHeader){ return resHeader?.children[6] || null; }
 	/**
 	 * 指定のレス要素内のあぼーん表示要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	あぼーん表示要素
 	 */
-	getInfoAbone(resHeader){ return resHeader.children[7]; },
+	getInfoAbone(resHeader){ return resHeader?.children[7] || null; }
 	/**
 	 * レス要素から、レス番号を取得します。
 	 * @param {Element} node	レス要素
 	 * @return {number} レス番号
 	 */
-	getResNumByContainer(node){ return parseInt(node.getAttribute("res")); },
+	getResNumByContainer(node){ return node ? parseInt(node.getAttribute("res"), 10) : 0; }
 	/**
 	 * ID要素からレス番号を取得します。
 	 * @param {Element} node	ID要素
 	 * @return {number} レス番号
 	 */
-	getResNumByID(node){ return parseInt(node.parentNode.parentNode.getAttribute("res")); },
+	getResNumByID(node){ return node ? parseInt(node.parentNode.parentNode.getAttribute("res"), 10) : 0; }
 	/**
 	 * 名前要素からレス番号を取得します。
 	 * @param {Element} node	名前要素
 	 * @return {number} レス番号
 	 */
-	getResNumByName(node){ return parseInt(node.parentNode.parentNode.getAttribute("res")); }
-};
+	getResNumByName(node){ return node ? parseInt(node.parentNode.parentNode.getAttribute("res"), 10) : 0; }
+}
+// グローバル変数名へのマッピング
+var Nodes = new NodesManager();
 
 /**
- * DOM 操作のために、主に動的なノードを管理します。
- * @namespace
+ * DOM 操作のために、主に動的なノードを管理するクラス
  */
-var ResNodes = {
-	log: new SkinLog("ResNodes", SkinLogLvl.WARNING),
-	errUndef(fn){ this.log.err(fn + " 有効な引数が指定されていません"); },
-	errNotFound(fn){ this.log.err(fn + " 要素が見つかりません"); },
+class ResNodesManager {
+	constructor() {
+		this.log = new SkinLog("ResNodes", SkinLogLvl.WARNING);
+	}
+	errUndef(fn){ this.log.err(fn + " 有効な引数が指定されていません"); }
+	errNotFound(fn){ this.log.err(fn + " 要素が見つかりません"); }
 	/**
 	 * レス要素の子要素から、レスのコンテナ要素を検索します。
 	 * @param {Element} node		レス要素の子要素
@@ -310,7 +336,7 @@ var ResNodes = {
 		parent = this.getParentByClassName(node, "resPopup");
 		if(!parent) this.errNotFound(fn);
 		return parent;
-	},
+	}
 	/**
 	 * レス要素の子要素から、指定したクラス名を持つ親要素を検索します。
 	 * @param {Element} node		レス要素の子要素
@@ -326,22 +352,23 @@ var ResNodes = {
 			parent = parent.parentNode;
 		}
 		return null;
-	},
+	}
 	/**
 	 * 外部リンク要素からレス番号を取得します。
 	 * @param {Element} node	外部リンク要素
 	 * @return {number} レス番号
 	 */
 	getResNumByOutLink(node){
+		if(!node) return 0;
 		if(node.hasAttribute("res")){
 			// スレッド情報ダイアログのリンク
-			return parseInt(node.getAttribute("res"));
+			return parseInt(node.getAttribute("res"), 10);
 		}
-		const parent = ResNodes.getParentContainer(node);
+		const parent = this.getParentContainer(node);
 		if(!parent) return 0;
 		// レス本文のリンク
-		return parseInt(parent.getAttribute("res"));
-	},
+		return parseInt(parent.getAttribute("res"), 10);
+	}
 	/**
 	 * 指定されたレス番号から、レス要素を取得します。
 	 * @param {number}		resNum	レス番号
@@ -351,7 +378,7 @@ var ResNodes = {
 		const fn = "getContainerByResNum(" + resNum +")";
 		if(!resNum){ this.errUndef(fn); return null; }
 		return _doc.getElementById("res" + resNum);
-	},
+	}
 	/**
 	 * 指定されたレス番号から、本文要素を取得します。
 	 * @param {number}		resNum	レス番号
@@ -361,7 +388,7 @@ var ResNodes = {
 		const fn = "getBodyByResNum(" + resNum + ")";
 		if(!resNum){ this.errUndef(fn); return null; }
 		return _doc.getElementById("body" + resNum);
-	},
+	}
 	/**
 	 * すべてのレス要素を取得します。
 	 * @param {Element}		node		親ノード
@@ -371,11 +398,11 @@ var ResNodes = {
 	getContainers(node, selected){
 		const fn = "getContainers(node," + selected + ")";
 		let elems = Array.from((node || Nodes.content).querySelectorAll(selected ? ".resSelected" : ".resContainer"));
-		if(elems) return elems;
+		if(elems && elems.length > 0) return elems;
 		elems = Array.from((node || Nodes.popupRoot).getElementsByClassName("resPopup"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべての既読レスヘッダ要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -384,9 +411,9 @@ var ResNodes = {
 	getHeaders(node){
 		const fn = "getHeaders(node)";
 		const elems = Array.from((node || Nodes.content).getElementsByClassName("resHeader"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべての新着レスヘッダ要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -395,9 +422,9 @@ var ResNodes = {
 	getNewHeaders(node){
 		const fn = "getNewHeaders(node)";
 		const elems = Array.from((node || Nodes.content).getElementsByClassName("resNewHeader"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべてのレス番号要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -406,9 +433,9 @@ var ResNodes = {
 	getNumbers(node){
 		const fn = "getNumbers(node)";
 		const elems = Array.from((node || Nodes.content).querySelectorAll(".resNumber > a"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべての名前欄要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -417,9 +444,9 @@ var ResNodes = {
 	getNames(node){
 		const fn = "getNames(node)";
 		const elems = Array.from((node || Nodes.content).getElementsByClassName("resName"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべてのメール欄要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -428,9 +455,9 @@ var ResNodes = {
 	getMails(node){
 		const fn = "getMails(node)";
 		const elems = Array.from((node || Nodes.content).getElementsByClassName("resMail"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべての日付欄要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -439,9 +466,9 @@ var ResNodes = {
 	getDates(node){
 		const fn = "getDates(node)";
 		const elems = Array.from((node || Nodes.content).getElementsByClassName("resDate"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべての ID 欄要素を取得します。
 	 * @param {Element}	node	親ノード（ポップアップは対象外なので無意味）
@@ -449,11 +476,12 @@ var ResNodes = {
 	 */
 	getIDs(node){
 		const fn = "getIDs(node)";
-		// ポップアップは対象外とすべき
 		const elems = Array.from((node || Nodes.content).querySelectorAll(".resContainer .resID[rel]"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
+
+
 	/**
 	 * すべての BeID 欄要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -462,9 +490,9 @@ var ResNodes = {
 	getBeIDs(node){
 		const fn = "getBeIDs(node)";
 		const elems = Array.from((node || Nodes.content).getElementsByClassName("resBeID"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべての有効なあぼーん情報要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -472,7 +500,7 @@ var ResNodes = {
 	 */
 	getInfoAbones(node){
 		return Array.from((node || Nodes.content).querySelectorAll(".resContainer[aboned='true'] .resInfoAbone"));
-	},
+	}
 	/**
 	 * すべての本文要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -481,9 +509,9 @@ var ResNodes = {
 	getBodies(node){
 		const fn = "getBodies(node)";
 		const elems = Array.from((node || Nodes.content).getElementsByClassName("resBody"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべてのレスアンカー要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -492,9 +520,9 @@ var ResNodes = {
 	getResAnchors(node){
 		const fn = "getResAnchors(node)";
 		const elems = Array.from((node || Nodes.content).querySelectorAll(".resBody .resPointer"));
-		if(!elems) this.errNotFound(fn);
-		return elems;
-	},
+		if(!elems || elems.length === 0) this.errNotFound(fn);
+		return elems || [];
+	}
 	/**
 	 * すべてのIDアンカーの外側span要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -502,7 +530,7 @@ var ResNodes = {
 	 */
 	getResMesIDs(node){
 		return Array.from((node || Nodes.content).getElementsByClassName("resMesID"));
-	},
+	}
 	/**
 	 * すべての外部リンク要素を取得します。
 	 * @param {Element}	node	親ノード
@@ -510,25 +538,24 @@ var ResNodes = {
 	 */
 	getOutLinks(node){
 		return Array.from((node || Nodes.content).querySelectorAll(".resBody .outLink, .ivurLink, .ivurBlockedLink"));
-	},
+	}
 	/**
 	 * 表示中のスレッドのレス範囲を取得します。
-	 * @return	{Object}	first:先頭レス番号, last:最終レス番号
 	 */
 	getResRange(){
-		const resItems = ResNodes.getContainers();
+		const resItems = this.getContainers();
 		return {
 			first: Nodes.getResNumByContainer(resItems[0]),
 			last: Nodes.getResNumByContainer(resItems[resItems.length - 1])
 		};
-	},
+	}
 	/**
 	 * Favicon の link 要素を取得します。
 	 * @return {Element}	要素
 	 */
 	getFavicon(){
 		return _doc.querySelectorAll("link[rel='icon']")[0];
-	},
+	}
 	/**
 	 * すべてのレス要素の親要素である div 要素を取得します。
 	 * @param	{Element}	node	親ノード
@@ -536,12 +563,9 @@ var ResNodes = {
 	 */
 	getContent(node){
 		return (node || _doc).querySelectorAll('div#content')[0];
-	},
+	}
 	/**
 	 * レス番号から、指定された形式でレスの内容を取得。
-	 * @param	{number}	resNum		レス番号
-	 * @param	{string}	[format]	"V2C"/指定なし: V2C形式、"Jane": Jane 形式、"Report": 2ch荒らし報告形式
-	 * @return	{string}	指定書式化したレス内容
 	 */
 	getEntireTextByIndex(resNum, format){
 		const fn = "getEntireTextByIndex(" + resNum + ",'" + format + "')";
@@ -576,155 +600,147 @@ var ResNodes = {
 			str += "\n" + body;
 		}
 		return str;
-	},
+	}
 	/**
 	 * 名前欄の文字列を取得します。
-	 * @param	{Element}	node	親ノード
-	 * @return	{string}	名前欄の文字列
 	 */
 	getNameText(node){
-		return this.getNames(node)[0].textContent;
-	},
+		return this.getNames(node)[0]?.textContent || "";
+	}
 	/**
 	 * メール欄の文字列を取得します。
-	 * @param	{Element}	node	親ノード
-	 * @return	{string}	メール欄の文字列
 	 */
 	getMailText(node){
-		return this.getMails(node)[0].textContent.replace(/^ | $/g, "");
-	},
+		return (this.getMails(node)[0]?.textContent || "").replace(/^ | $/g, "");
+	}
 	/**
 	 * 日付欄の文字列を取得します。
-	 * @param	{Element}	node	親ノード
-	 * @return	{string}	日付欄の文字列
 	 */
 	getDateText(node){
-		return this.getDates(node)[0].textContent.replace(/^ | $/g, "");
-	},
+		return (this.getDates(node)[0]?.textContent || "").replace(/^ | $/g, "");
+	}
 	/**
 	 * ID 欄の文字列を取得します。
-	 * @param	{Element}	node	親ノード
-	 * @return	{string}	ID欄の文字列
 	 */
 	getIDText(node){
-		return this.getIDs(node)[0].textContent.replace(/^ *(ID:[^ ]*).*/, "$1");
-	},
+		return (this.getIDs(node)[0]?.textContent || "").replace(/^ *(ID:[^ ]*).*/, "$1");
+	}
 	/**
 	 * BeID 欄の文字列を取得します。
-	 * @param	{Element}	node	親ノード
-	 * @return	{string}	BeID欄の文字列
 	 */
 	getBeIDText(node){
-		return this.getBeIDs(node)[0].textContent.replace(/^ *([^ ]*).*/, "$1");
-	},
+		return (this.getBeIDs(node)[0]?.textContent || "").replace(/^ *([^ ]*).*/, "$1");
+	}
 	/**
 	 * 本文の文字列を取得します。
-	 * @param	{Element}	node	親ノード
-	 * @return	{string}	本文の文字列
 	 */
 	getBodyText(node){
 		return ThreadDocument.getInnerText(this.getBodies(node)[0], false).replace(/ \n /g, "\n").replace(/^ | $/g, "") + "\n";
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ResNodes = new ResNodesManager();
+
 
 /**
- * ドキュメント全体を管理します。
- * @namespace
+ * ドキュメント全体を管理するクラス
  */
-var ThreadDocument = {
-	log: new SkinLog("ThreadDocument", SkinLogLvl.WARNING),
-	/**
-	 * スレッドタイトル
-	 * @type {string}
-	 */
-	title: "",
-	/**
-	 * ステータス文字列
-	 * @type {string}
-	 */
-	status: "",
-	/**
-	 * すべてのレスの件数
-	 * @type {number}
-	 */
-	countAll: null,
-	/**
-	 * DAT サイズ
-	 * @type {string}
-	 */
-	datsize: null,
-	/**
-	 * 既読レスの件数
-	 * @type {number}
-	 */
-	countRead: null,
-	/**
-	 * 新着レスの件数
-	 * @type {number}
-	 */
-	countUnread: null,
-	/**
-	 * chaika内部サーバURL
-	 * @type {string}
-	 */
-	serverUrl: "",
-	/**
-	 * スレッドのURL
-	 * @type {string}
-	 */
-	threadUrl: "",
-	/**
-	 * 板のURL
-	 * @type {string}
-	 */
-	boardUrl: "",
-	/**
-	 * スキンのURL
-	 * @type {string}
-	 */
-	skinPath: "",
-	/**
-	 * サーバのホスト名
-	 * @type {string}
-	 */
-	host: "",
-	/**
-	 * 板名
-	 * @type {string}
-	 */
-	boardName: "",
-	/**
-	 * スレッド番号
-	 * @type {string}
-	 */
-	threadID: "",
-	/**
-	 * スレッド表示のオプション文字列
-	 * @type {string}
-	 */
-	option: "",
-	/**
-	 * 最後に再読み込みを行った日付
-	 * @type {Date}
-	 */
-	date: new Date(),
-	/**
-	 * ブックマークのレス番号
-	 * @type {number}
-	 */
-	toBookMark: 0,
-	/**
-	 * 新着レスへスクロールするか
-	 * @type {boolean}
-	 */
-	toNewRes: false,
+class ThreadDocumentManager {
+	constructor() {
+		this.log = new SkinLog("ThreadDocument", SkinLogLvl.WARNING);
+		/**
+		 * スレッドタイトル
+		 * @type {string}
+		 */
+		this.title = "";
+		/**
+		 * ステータス文字列
+		 * @type {string}
+		 */
+		this.status = "";
+		/**
+		 * すべてのレスの件数
+		 * @type {number}
+		 */
+		this.countAll = null;
+		/**
+		 * DAT サイズ
+		 * @type {string}
+		 */
+		this.datsize = null;
+		/**
+		 * 既読レスの件数
+		 * @type {number}
+		 */
+		this.countRead = null;
+		/**
+		 * 新着レスの件数
+		 * @type {number}
+		 */
+		this.countUnread = null;
+		/**
+		 * chaika内部サーバURL
+		 * @type {string}
+		 */
+		this.serverUrl = "";
+		/**
+		 * スレッドのURL
+		 * @type {string}
+		 */
+		this.threadUrl = "";
+		/**
+		 * 板のURL
+		 * @type {string}
+		 */
+		this.boardUrl = "";
+		/**
+		 * スキンのURL
+		 * @type {string}
+		 */
+		this.skinPath = "";
+		/**
+		 * サーバのホスト名
+		 * @type {string}
+		 */
+		this.host = "";
+		/**
+		 * 板名
+		 * @type {string}
+		 */
+		this.boardName = "";
+		/**
+		 * スレッド番号
+		 * @type {string}
+		 */
+		this.threadID = "";
+		/**
+		 * スレッド表示のオプション文字列
+		 * @type {string}
+		 */
+		this.option = "";
+		/**
+		 * 最後に再読み込みを行った日付
+		 * @type {Date}
+		 */
+		this.date = new Date();
+		/**
+		 * ブックマークのレス番号
+		 * @type {number}
+		 */
+		this.toBookMark = 0;
+		/**
+		 * 新着レスへスクロールするか
+		 * @type {boolean}
+		 */
+		this.toNewRes = false;
+		this._loaded = false;
+	}
 	/*
 	 * 読み込み完了したか
 	 */
 	isLoaded(){
 		return this._loaded;
-	},
-	_loaded: false,
+	}
 	/**
 	 * イベントを処理します。
 	 */
@@ -740,36 +756,36 @@ var ThreadDocument = {
 			this.onContextMenu(e);
 			break;
 		}
-	},
+	}
 	/**
-	 * スキンの処理を開始します。Footer.htmlからscript.jsが読み込まれ、その最後で実行されます。
+	 * スキンの処理を開始します。
 	 */
 	run(){
 		const fn = "run()";
 		this.log.info(fn);
 
-		this.title　= Nodes.threadName.textContent;							// <THREADNAME/>
-		this.serverUrl = Nodes.header.getAttribute("serverurl");			// <SERVERURL/>
-		this.boardUrl = Nodes.header.getAttribute("boardurl");				// <BOARDURL/>
-		this.threadUrl = Nodes.header.getAttribute("threadurl");			// <THREADURL/>
-		this.skinPath = Nodes.header.getAttribute("skinpath");				// <SKINPATH/>
-		this.status = Nodes.footer.getAttribute("status");					// <STATUS/>
-		this.countRead = parseInt(Nodes.footer.getAttribute("getres"));		// <GETRESCOUNT/>
-		this.countUnread = parseInt(Nodes.footer.getAttribute("newres"));	// <NEWRESCOUNT/>
-		this.countAll = parseInt(Nodes.footer.getAttribute("allres"));		// <ALLRESCOUNT/>
-		this.datsize = parseInt(Nodes.footer.getAttribute("size"));			// <SIZEKB/>
+		this.title = Nodes.threadName.textContent;
+		this.serverUrl = Nodes.header.getAttribute("serverurl");
+		this.boardUrl = Nodes.header.getAttribute("boardurl");
+		this.threadUrl = Nodes.header.getAttribute("threadurl");
+		this.skinPath = Nodes.header.getAttribute("skinpath");
+		this.status = Nodes.footer.getAttribute("status");
+		this.countRead = parseInt(Nodes.footer.getAttribute("getres"), 10);
+		this.countUnread = parseInt(Nodes.footer.getAttribute("newres"), 10);
+		this.countAll = parseInt(Nodes.footer.getAttribute("allres"), 10);
+		this.datsize = parseInt(Nodes.footer.getAttribute("size"), 10);
 
-		// URIのオプション部分抽出
-		if(_doc.location.href.match(/read\.cgi\/.*\/(.*)$/)){
-			this.option = RegExp.$1;
+		const matchOption = _doc.location.href.match(/read\.cgi\/.*\/(.*)$/);
+		if(matchOption){
+			this.option = matchOption[1];
 			this.log.dbg("option:" + this.option);
 		}
-		// 板名
+
 		Nodes.boardName.href = "chaika://board/" + this.boardUrl;
 		if(SkinPref.get("enableBoardName")){
 			Nodes.boardName.textContent = Board.getName(this.boardUrl) || "";
 		}
-		// サイト別設定
+
 		const boardHost = this.boardUrl.replace(/^https?:\/\/([^\/]+)\/.+$/, "$1");
 		_doc.body.setAttribute("host", boardHost);
 		if(SkinPref.get("enableFavicon")){
@@ -791,11 +807,9 @@ var ThreadDocument = {
 
 		this.setStatus(true);
 
-		// イベントリスナ登録-1
 		PopupPreventer.startup();
 		FxFindHandler.startup();
 
-		// 以下2つはloadイベント発生前に設定されている必要がある
 		this.toBookMark = Bookmark.init();
 		this.toNewRes = SkinPref.get("enableScrollToNewRes");
 
@@ -805,10 +819,8 @@ var ThreadDocument = {
 		window.addEventListener("load", this, false);
 		window.addEventListener("contextmenu", this, false);
 
-		// スレ表示加工
 		this.modifyContent(Nodes.content);
 
-		// イベントリスナ登録-2
 		AutoReload.startup();
 		b2rAboneHandler.startup();
 		KeyInput.startup();
@@ -817,10 +829,9 @@ var ThreadDocument = {
 		IDPopup.startup();
 		NamePopup.startup();
 		MultipleResSelector.startup();
-	},
+	}
 	/**
 	 * loadイベントを処理します。
-	 * スキンチェックとスクロール処理を行います。
 	 */
 	onLoad(){
 		const fn = "onLoad()";
@@ -834,7 +845,6 @@ var ThreadDocument = {
 			SkinPref.save();
 			_doc.getElementById("skinstyle").href = this.skinPath + "style-lego-ex.css";
 		}else{
-			// しおり か 新着（もしくは最終）レスへのスクロール
 			if(this.toBookMark){
 				Bookmark.jumpTo();
 			}else if(this.toNewRes){
@@ -844,12 +854,9 @@ var ThreadDocument = {
 				ResImage.startLazyload();
 			}
 		}
-	},
+	}
 	/**
 	 * contextmenu イベントを処理します。
-	 * あぼーん設定の際に便利なように トリップ、SLIP、ID で右クリックした場合に自動で選択します。
-	 * @param {event} e イベント
-	 * @todo BeID の処理は保留
 	 */
 	onContextMenu(e){
 		const fn = "onContextMenu(e)";
@@ -861,57 +868,56 @@ var ThreadDocument = {
 
 		const text = node.textContent;
 		const selection = window.getSelection();
-		if(text.match(/^ID:([^\(\)\? ]{3,})/)){
+		const matchID = text.match(/^ID:([^\(\)\? ]{3,})/);
+		const matchTrip = text.match(/^(\u25C6\S+)/);
+
+		if(matchID){
 			selection.removeAllRanges();
 			const range = _doc.createRange();
 			range.setStart(node.firstChild, 3);
-			range.setEnd(node.firstChild, 3 + RegExp.$1.length);
+			range.setEnd(node.firstChild, 3 + matchID[1].length);
 			selection.addRange(range);
-		}else if(text.match(/^(\u25C6\S+)/)){
+		}else if(matchTrip){
 			selection.removeAllRanges();
 			const range = _doc.createRange();
 			range.setStart(node.firstChild, 0);
-			range.setEnd(node.firstChild, RegExp.$1.length);
+			range.setEnd(node.firstChild, matchTrip[1].length);
 			selection.addRange(range);
 		}else{
 			selection.selectAllChildren(node);
 		}
-	},
+	}
 	/**
 	 * 指定されたノードの文字列を正しく取得します。
-	 * @param {Element} node	ノード
-	 * @param {boolean} multi	falseなら改行で連結した文字列を、trueなら配列に分割された文字列を返します。
-	 * @return {string|Array<string>}	取得した文字列または配列
 	 */
 	getInnerText(node, multi){
 		const fn = "getInnerText(node," + multi +")";
 		this.log.info(fn);
 		const nodes = node.childNodes;
 		const ret = [];
-		Array.from(nodes).forEach((node) => {
-			if(node.hasChildNodes()){
-				ret.push(this.getInnerText(node, false));
-			}else if(node.tagName === "BR"){
+		Array.from(nodes).forEach((n) => {
+			if(n.hasChildNodes()){
+				ret.push(this.getInnerText(n, false));
+			}else if(n.tagName === "BR"){
 				ret.push("\n");
-			}else if(node.nodeType === Node.TEXT_NODE){
-				ret.push(node.nodeValue);
-			}else if(node.alt){
-				ret.push(node.alt);
+			}else if(n.nodeType === Node.TEXT_NODE){
+				ret.push(n.nodeValue);
+			}else if(n.alt){
+				ret.push(n.alt);
 			}
 		});
 		if(!multi) return ret.join("");
 		return ret;
-	},
+	}
 	/**
 	 * スレッドの情報をクリップボードにコピーします。
 	 */
 	copyThreadInfo(){
 		this.log.info("copyThreadInfo()");
 		Clipboard.setClipboard(this.title + "\n" + this.threadUrl + "\n");
-	},
+	}
 	/**
 	 * 書き込みウィザードを開きます。
-	 * @param {number|string} [repAnchorNums] 返信先のレス番号、または複数のレス番号をカンマとハイフンで連結した文字列
 	 */
 	writeTo(repAnchorNums){
 		const fn = "writeTo(" + repAnchorNums + ")";
@@ -919,14 +925,14 @@ var ThreadDocument = {
 		if(!repAnchorNums) repAnchorNums = "";
 		try{ location.href = "chaika://post/" + this.threadUrl + repAnchorNums; }
 		catch(e){ this.log.warn("エラーを無視しました: " + e); }
-	},
+	}
 	/**
 	 * すべての新着レスを既読状態にします。
 	 */
 	markAsRead(){
 		this.log.info("markAsRead()");
 		ResNodes.getNewHeaders().forEach((header) => header.classList.remove("resNewHeader"));
-	},
+	}
 	/**
 	 * 新着レスまでスクロールします。
 	 */
@@ -934,17 +940,15 @@ var ThreadDocument = {
 		const fn = "scrollToNewRes()";
 		this.log.info(fn);
 		if(_doc.location.href.indexOf("#") !== -1) return;
-		if(this.option.match(/^\d+/)){ // we're in log pick-up mode
+		if(this.option.match(/^\d+/)){
 			this.log.dbg("log pick-up mode");
 			window.scrollTo(0, 0);
 			return;
 		}
 		window.scrollTo(0, Nodes.newMark ? (Nodes.newMark.offsetTop - Nodes.threadViewTop) : 0);
-	},
+	}
 	/**
 	 * Favicon を設定します。
-	 * @param {string}  filename アイコンのファイル名
-	 * @param {boolean} inactive 非アクティヴ状態かどうか
 	 */
 	setFavicon(filename, inactive){
 		const fn = "setFavicon()";
@@ -961,10 +965,9 @@ var ThreadDocument = {
 			favicon.parentNode.removeChild(favicon);
 		}
 		if(inactive) this.unfocusUnread = 0;
-	},
+	}
 	/**
 	 * ステータスを設定して、表示を更新します。
-	 * @param {string} updateStatus ステータス文字列
 	 */
 	setStatus(updateStatus){
 		const fn = "setStatus()";
@@ -977,13 +980,14 @@ var ThreadDocument = {
 				this.status = this.countUnread + "件の新着レス";
 				this.setFavicon("new");
 			}else{
+				const matchErr = this.status.match(/\(´・ω・`\)「エラー : (.+)」/);
 				switch(this.status){
 				case "( ｰωｰ)「DAT 落ち」":
 					Nodes.statusText.className = "warning";
 					this.status = "DAT 落ち";
 					this.setFavicon("warning");
 					break;
-				case "(｀・ω・´)「OK」": // for shitaraba
+				case "(｀・ω・´)「OK」":
 				case "( ｰωｰ)「新着なし」":
 					Nodes.statusText.className = "ok";
 					this.status = "新着なし";
@@ -1011,7 +1015,7 @@ var ThreadDocument = {
 					break;
 				default:
 					Nodes.statusText.className = "error";
-					if(this.status.match("\(´・ω・`\)「エラー : (.+)」")) this.status = RegExp.$1;
+					if(matchErr) this.status = matchErr[1];
 					this.setFavicon("error");
 				}
 			}
@@ -1019,25 +1023,23 @@ var ThreadDocument = {
 		Nodes.statusText.textContent = this.status;
 		if(SkinPref.get("enableShowDatSize")) Nodes.datSize.textContent = this.datsize + "KB";
 		if(SkinPref.get("enableContract"))	this.contractCaption();
-	},
+	}
 	/**
 	 * スレッドタイトルを省略表示します。
 	 */
 	contractCaption(){
-		// 隠れる位置にあるかチェック(いまいち…　30 はアバウト)
 		const maxLeft = ((Math.abs(Nodes.threadName.offsetTop - Nodes.command.offsetTop) > 30) ?
 						window.innerWidth : Nodes.command.offsetLeft) - Nodes.datSize.offsetWidth;
-		Nodes.threadName.textContent = this.title;	// 一旦元に戻してあげて statusText 等を再配置
+		Nodes.threadName.textContent = this.title;
 		if(Nodes.datSize.offsetLeft > maxLeft){
 			for(let i = this.title.length - 1; i >= 0; i--){
 				Nodes.threadName.textContent = this.title.substring(0, i) + "...";
 				if(Nodes.datSize.offsetLeft <= maxLeft) break;
 			}
 		}
-	},
+	}
 	/**
 	 * 各レスについて参照レスを調べ、参照されているレス番号にはポップアップと参照レス数の設定をします。
-	 * @param {Element} node 親ノード
 	 */
 	markTrackbackedResNumbers(node){
 		if(!SkinPref.get("enableShowTrackbackCount")) return;
@@ -1060,7 +1062,7 @@ var ThreadDocument = {
 			}
 
 			if(elem.className){
-				elem.nextElementSibling.textContent = tb.length;// textノードは飛ばす
+				elem.nextElementSibling.textContent = tb.length;
 				elem.addEventListener("mouseover", TrackbackPopup, false);
 				this.log.dbg("tb[" + resNum + "] length=" + tb.length + " (popup)");
 			}else{
@@ -1073,10 +1075,9 @@ var ThreadDocument = {
 			}
 			if(icon) icon.setAttribute("tb", tb.length);
 		});
-	},
+	}
 	/**
 	 * 設定に応じて外部リンクを改変します。
-	 * @param {Element} node 親ノード
 	 */
 	modifyOutLinks(node){
 		const fn = "modifyOutLinks(node)";
@@ -1090,13 +1091,13 @@ var ThreadDocument = {
 		ResNodes.getOutLinks(node).forEach((elem) => {
 			let idn = "";
 			elem.addEventListener("mouseover", OutlinkPopup, false);
-			// 日本語ドメイン変換
 			if(enableIDN && elem.href.match(/[\/\.]\/$/i)){
 				const ns = elem.nextSibling;
 				if(ns){
-					if(ns.textContent.match(/^([^\s\.]{1,20})(\.(?:[a-z]{2}|com|net)(?:\/[\-_\.\!\~\*\"\(\)a-z0-9\;\/\?\:\@\&\=\+\$\,\%\#]+)?)/i)){
-						const domain = RegExp.$1;
-						const rest   = RegExp.$2;
+					const matchIDN = ns.textContent.match(/^([^\s\.]{1,20})(\.(?:[a-z]{2}|com|net)(?:\/[\-_\.\!\~\*\"\(\)a-z0-9\;\/\?\:\@\&\=\+\$\,\%\#]+)?)/i);
+					if(matchIDN){
+						const domain = matchIDN[1];
+						const rest   = matchIDN[2];
 						const all    = domain + rest;
 						const puny   = "xn--" + Punycode.encode(domain);
 						elem.appendChild(_doc.createTextNode(all));
@@ -1106,20 +1107,16 @@ var ThreadDocument = {
 					}
 				}
 			}
-			// OutlinkPopup#handleEvent に渡すURLをrel属性にセットしておく必要がある
 			if(!elem.hasAttribute("rel")){
 				elem.setAttribute("rel", !idn ? elem.href.replace(this.serverUrl, "") : idn);
 			}
-			// 新しいウインドウで開く
 			if(enableNewWindow && elem.target !== "_blank") elem.target = "_blank";
 
 			if(elem.href.indexOf("read.cgi") !== -1){
-				// 2ch互換スレッド
 				if(enableForChaika && elem.href.indexOf(this.serverUrl) === -1){
 					elem.href = this.serverUrl + elem.href;
 				}
 			}else if(!ImagePopup.isImage(elem.href)){
-				// 画像/動画以外の外部リンク
 				if(enableNoReferer && elem.href.indexOf("ime.nu.html?url=") === -1){
 					elem.href = this.skinPath + "ime.nu.html?url=" + elem.href;
 					if(idn || elem.textContent.indexOf("xn--") !== -1){
@@ -1128,11 +1125,9 @@ var ThreadDocument = {
 				}
 			}
 		});
-	},
+	}
 	/**
 	 * レスアンカーの内容を改変します
-	 * @param {Element} node		評価する親ノード
-	 * @param {boolean} force_bad	正しくないレスアンカーの改変処理を強制するかどうか
 	 */
 	replaceContextAnchor(node, force_bad){
 		const fn = "replaceContextAnchor(node," + force_bad + ")";
@@ -1144,7 +1139,6 @@ var ThreadDocument = {
 		const do_comma = force_bad || (do_bad && SkinPref.get("enableReplaceCommaAnchor"));
 		const do_plus  = force_bad || (do_bad && SkinPref.get("enableReplacePlusAnchor"));
 		const do_1000  = force_bad || (do_bad && SkinPref.get("enableReplace1000Anchor"));
-		this.log.dbg("do_bad=" + do_bad + " do_wide=" + do_wide + " do_comma=" + do_comma + " do_plus=" + do_plus);
 
 		if(do_wide){
 			ResNodes.getBodies(node).forEach((elem) => {
@@ -1163,26 +1157,31 @@ var ThreadDocument = {
 				if(!ns) return;
 				while(ns.textContent.length > 0){
 					let found = false;
-					if(do_1000 && anchorItem.textContent.match(/^>{1,2}\d{3}$/) && ns.textContent.match(/^(\d) ?$/)){
-						const text = RegExp.$1;
+					const match1000 = anchorItem.textContent.match(/^>{1,2}\d{3}$/) && ns.textContent.match(/^(\d) ?$/);
+					const matchWide = ns.textContent.match(/^([\uFF10-\uFF19][0-9\uFF10-\uFF19]{0,2}([\-\uFF0D][0-9\uFF10-\uFF19]{0,4})?)/);
+					const matchComma = ns.textContent.match(/^(\,\s*[0-9\uFF10-\uFF19]{1,4}([\-\uFF0D][0-9\uFF10-\uFF19]{0,4})?)/);
+					const matchPlus = ns.textContent.match(/^(\+\s*[0-9\uFF10-\uFF19]{1,4}([\-\uFF0D][0-9\uFF10-\uFF19]{0,4})?)/);
+
+					if(do_1000 && match1000){
+						const text = match1000[1];
 						anchorItem.appendChild(_doc.createTextNode(text));
 						ns.textContent = ns.textContent.substr(text.length);
 						found = true;
 					}
-					if(do_wide && ns.textContent.match(/^([\uFF10-\uFF19][0-9\uFF10-\uFF19]{0,2}([\-\uFF0D][0-9\uFF10-\uFF19]{0,4})?)/)){
-						const text = RegExp.$1;
+					if(do_wide && matchWide){
+						const text = matchWide[1];
 						anchorItem.appendChild(_doc.createTextNode(text));
 						ns.textContent = ns.textContent.substr(text.length);
 						found = true;
 					}
-					if(do_comma && ns.textContent.match(/^(\,\s*[0-9\uFF10-\uFF19]{1,4}([\-\uFF0D][0-9\uFF10-\uFF19]{0,4})?)/)){
-						const text = RegExp.$1;
+					if(do_comma && matchComma){
+						const text = matchComma[1];
 						anchorItem.appendChild(_doc.createTextNode(text));
 						ns.textContent = ns.textContent.substr(text.length);
 						found = true;
 					}
-					if(do_plus  && ns.textContent.match(/^(\+\s*[0-9\uFF10-\uFF19]{1,4}([\-\uFF0D][0-9\uFF10-\uFF19]{0,4})?)/)){
-						const text = RegExp.$1;
+					if(do_plus && matchPlus){
+						const text = matchPlus[1];
 						anchorItem.appendChild(_doc.createTextNode(text));
 						ns.textContent = ns.textContent.substr(text.length);
 						found = true;
@@ -1191,61 +1190,31 @@ var ThreadDocument = {
 				}
 			}
 		});
-		return;
-	},
+	}
 	/**
-	 * 本文の内容を以下について改変します。
-	 * (1)レスアンカーの修正、
-	 * (2)SLIPのカウントと色設定、
-	 * (3)IDのカウント・発言数表示と色設定、
-	 * (4)逆参照数のカウント・表示、
-	 * (5)ReplaceStrによる置換、
-	 * (6)外部リンクのポップアップやインライン表示の処理、
-	 * (7)自分/返信レスの処理
-	 * @param {Element} node		親ノード
-	 * @param {boolean} forceBadAnchor	正しくないレスアンカーの改変処理を強制するかどうか
-	 * @param {boolean} forceReplace	ReplaceStr.txt による置換処理を強制するかどうか
+	 * 本文の内容を改変します。
 	 */
 	modifyContent(node, forceBadAnchor, forceReplace){
-		const fn = "modifyContent(node," + forceBadAnchor + "," + forceReplace + ")";
-		this.log.info(fn);
-		// (1)
 		this.replaceContextAnchor(node, forceBadAnchor);
-
 		if(!node || node.className !== "popupBody"){
-			// (2)
 			Name.countSLIPs();
-			// (3)
 			ID.countIDs();
 		}
-		// (4)
 		this.markTrackbackedResNumbers(node);
-		// (5)
 		if(forceReplace || SkinPref.get("enableReplaceStr")){
 			ReplaceStr.replace(this.threadUrl, this.title, node);
 		}
-		// (6)
 		this.modifyOutLinks(node);
 		if(SkinPref.get("enableEmbedImage")){
 			ResImage.embed(node, !SkinPref.get("enableEmbedImageWithCheck"));
 		}
-		// (7)
 		MyAndRep.scanMyPostAndReply();
-	},
+	}
 	/**
 	 * XMLHttpRequest を利用して、動的にレスを挿入します。
-	 * @param {number} 		start		挿入するレス番号の始点
-	 * @param {number} 		end			挿入するレス番号の終点
-	 * @param {boolean} 	before		レスを末端ではなく先頭に追加するかどうか
-	 * @param {boolean} 	scrollToTop 挿入後に先頭までスクロールさせるかどうか
-	 * @param {function()} 	func		挿入後に実行する関数
-	 * @param {boolean} 	noUpdate	ステータスを更新するかどうか
-	 * @param {boolean} 	noScroll	挿入後にスクロールさせるかどうか
 	 */
 	asyncInsert(start, end, before, scrollToTop, func, noUpdate, noScroll){
-		const fn = "asyncInsert(" + start + "," + end + "," + before + "," + scrollToTop + ",func," + noUpdate + "," + noScroll + ")";
-		this.log.info(fn);
-
+		const fn = "asyncInsert()";
 		if(!noUpdate){
 			Nodes.statusText.className = "throbber";
 			this.setFavicon("throbber");
@@ -1256,7 +1225,7 @@ var ThreadDocument = {
 			divTemp.innerHTML = html;
 			const newContent = ResNodes.getContent(divTemp);
 			newContent.id = "";
-			const oldItems = ResNodes.getContainers(Nodes.content);//既存のレス要素配列
+			const oldItems = ResNodes.getContainers(Nodes.content);
 
 			let resStart = null;
 			if(before){
@@ -1292,32 +1261,28 @@ var ThreadDocument = {
 		.catch((e) => {
 			this.log.err(fn + ":" + e.message);
 		});
-	},
+	}
 	/**
-	 * XMLHttpRequest を利用して、表示域外のレスをすべて表示します。
-	 * この機能は Ctrl+スペース のキーアサインで呼び出されます。
+	 * 表示域外のレスをすべて表示します。
 	 */
 	showAll(){
-		const fn = "showAll()";
-		this.log.info(fn);
 		const nodes = ResNodes.getContainers();
 		for(let i = 0, n = nodes.length; i < n; i++){
 			this.resShow(nodes[i]);
 		}
-		ThreadDocument.flagDigest = false;
+		this.flagDigest = false;
 
 		const resStart = ResNodes.getContainerByResNum(1);
-		const addFirst = resStart ? false : true;
+		const addFirst = !resStart;
 		const startIndex = Nodes.getResNumByContainer(resStart ? nodes[1] : nodes[0]);
 		const endIndex   = Nodes.getResNumByContainer(nodes[nodes.length - 1]);
 
 		if(addFirst) this.asyncInsert(1, 1, true, true);
 		if(startIndex > 2) this.asyncInsert(2, startIndex - 1, true, true);
 		if(endIndex < this.countAll) this.asyncInsert(endIndex + 1, this.countAll, false, true);
-	},
+	}
 	/**
-	 * XMLHttpRequest を利用して、更新をチェックし新着レスがあれば挿入します。
-	 * @param {boolean} noScroll 挿入後にスクロールしないかどうか
+	 * 更新をチェックし新着レスがあれば挿入します。
 	 */
 	reload(noScroll, background){
 		const fn = "reload()";
@@ -1329,7 +1294,6 @@ var ThreadDocument = {
 			this.setStatus(true);
 			return;
 		}
-		// 更新中表示
 		Nodes.statusText.className = "throbber";
 		this.setFavicon("throbber");
 		if(Nodes.newMark){
@@ -1346,8 +1310,7 @@ var ThreadDocument = {
 			divTemp.innerHTML = html;
 			const newContent = ResNodes.getContent(divTemp);
 			newContent.id = "";
-			const newItems = ResNodes.getContainers(newContent);//読み込んだレス要素配列
-			// あぼーん検出対策で先頭は既読1件含めて取得している
+			const newItems = ResNodes.getContainers(newContent);
 			if(newItems.length <= 1){
 				if(!background || this.countUnread === 0){
 					this.status = "( ｰωｰ)「新着なし」";
@@ -1376,7 +1339,7 @@ var ThreadDocument = {
 			const newDiv = _doc.createElement("div");
 			newDiv.id = "NewMark";
 			Nodes.content.appendChild(newDiv);
-			for(let i = 1; i < newItems.length; i++){ // 先頭１件を飛ばして追加
+			for(let i = 1; i < newItems.length; i++){
 				Nodes.content.appendChild(newItems[i]);
 			}
 
@@ -1392,14 +1355,11 @@ var ThreadDocument = {
 		.catch((e) => {
 			this.log.err(fn + ":" + e.message);
 		});
-	},
+	}
 	/**
-	 * 指定されたレスまでスクロールします。アンカーの click イベントから呼ばれます。
-	 * @param {event}	e	イベント
+	 * 指定されたレスまでスクロールします。
 	 */
 	jumpTo(e){
-		const fn = "jumpTo(e)";
-		this.log.info(fn);
 		const node = e.target;
 		if(!node.classList.contains("resPointer")) return;
 
@@ -1410,18 +1370,16 @@ var ThreadDocument = {
 		if(destination){
 			window.scrollTo(0, destination.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight));
 		}else{
-			// 飛び先が表示範囲の前なので読み込む
 			const resItems = ResNodes.getContainers();
 			const resStart = Nodes.getRes(1);
 			const startIndex = Nodes.getResNumByContainer(resStart ? resItems[1] : resItems[0]);
 			if(range.start < startIndex) this.asyncInsert(range.start, startIndex - 1, true, false);
 		}
-	},
+	}
 	/**
 	 * 改ページ処理を行います。
-	 * @param {string}	type	"prev"=前ページ / "next":次ページ
 	 */
-	movePage(type){
+  movePage(type){
 		const fn = "movePage(" + type + ")";
 		this.log.info(fn);
 		const ridx = SkinPref.get("valueReadBandWidth");
@@ -1429,39 +1387,42 @@ var ThreadDocument = {
 		let pen = 0;
 		let psn = 0;
 
+		const matchRange = this.option.match(/^(\d{1,4})(\-)?(\d{1,4})?(n)?(#res\d{1,4})?$/);
+		const matchLatest = this.option.match(/^l(\d{1,4})(n)?(#res\d{1,4})?$/);
+
 		switch(type){
 		case "prev":
-			//範囲オプション付き
-			if      (this.option.match(/^(\d{1,4})(\-)?(\d{1,4})?(n)?(#res\d{1,4})?$/)){
-				pen = parseInt(RegExp.$1) - 1;
+			if      (matchRange){
+				pen = parseInt(matchRange[1], 10) - 1;
 				psn = pen - range + 1;
-			//最新○件
-			}else if(this.option.match(/^l(\d{1,4})(n)?(#res\d{1,4})?$/)){
-				pen = ThreadDocument.countRead - parseInt(RegExp.$1)/* - 1*/;
+			}else if(matchLatest){
+				pen = this.countRead - parseInt(matchLatest[1], 10);
 				psn = pen - range + 1;
 			}
 			break;
-		case "next":
-			//範囲オプション付き(その1)
-			if      (this.option.match(/^(\d{1,4})\-(\d{1,4})(n)?(#res\d{1,4})?$/)){
-				psn = parseInt(RegExp.$2) + 1;
+		case "next": { // ブロックスコープを作成
+			const matchNextRange2 = this.option.match(/^(\d{1,4})\-(\d{1,4})(n)?(#res\d{1,4})?$/);
+			const matchNextRange1 = this.option.match(/^(\d{1,4})(\-)?(n)?(#res\d{1,4})?$/);
+			const matchNextLatest = this.option.match(/^l(\d{1,4})(n)?$/);
+
+			if      (matchNextRange2){
+				psn = parseInt(matchNextRange2[2], 10) + 1;
 				pen = psn + range - 1;
-			//範囲オプション付き(その2)
-			}else if(this.option.match(/^(\d{1,4})(\-)?(n)?(#res\d{1,4})?$/)){
-				psn = parseInt(RegExp.$1) + range + 1;
+			}else if(matchNextRange1){
+				psn = parseInt(matchNextRange1[1], 10) + range + 1;
 				pen = psn + range - 1;
-			//最新○件
-			}else if(this.option.match(/^l(\d{1,4})(n)?$/)){
-				pen = ThreadDocument.countAll;
+			}else if(matchNextLatest){
+				pen = this.countAll;
 				psn = pen - range + 1;
 			}
 			break;
+		} // ブロックスコープの終了
 		}
 
 		if(psn < 1){
 			psn = 1;
-		}else if(psn > ThreadDocument.countAll){
-			psn = ThreadDocument.countAll;
+		}else if(psn > this.countAll){
+			psn = this.countAll;
 		}
 		if(pen < 1){
 			pen = range;
@@ -1469,97 +1430,40 @@ var ThreadDocument = {
 		}else{
 			location.href = this.serverUrl + this.threadUrl + psn + "-" + pen + (type === "prev" ? "#res" + pen : "");
 		}
-	},
-	/**
-	 * 指定したレスを表示状態にします。
-	 * @param {Element}		node	レス要素
-	 */
+	}
 	resShow(node){
 		node.removeAttribute("hide");
-	},
-	/**
-	 * 指定したレスを非表示状態にします。
-	 * @param {Element}		node	レス要素
-	 */
+	}
 	resHide(node){
 		node.setAttribute("hide", "true");
-	},
-	/**
-	 * 指定したレスが表示状態かを調べます。
-	 * @param {Element}		node	レス要素
-	 * @return {boolean*	表示状態か
-	 */
+	}
 	isShow(node){
 		return !node.hasAttribute("hide");
 	}
-};
-var TD = ThreadDocument;
+}
+// グローバル変数名へのマッピング
+var ThreadDocument = new ThreadDocumentManager();
+var TD = ThreadDocument; // エイリアスマッピング
+
 
 /**
- * 名前を走査して、レス番号と名前の対応テーブルを管理します。
- * @namespace
+ * 名前を走査して、レス番号と名前の対応テーブルを管理するクラス
  */
-var Name = {
-	log: new SkinLog("Name", SkinLogLvl.WARNING),
-	/**
-	 * レス番号と名前の対応テーブル
-	 * @type {Object}
-	 * @example
-	 * {
-	 *     "hogehoge": [1, 3, 5],
-	 *     "foobar":   [200, 201, 208]
-	 * }
-	 */
-	items: [],
-	/**
-	 * 名前の総個数（処理済み判定用）
-	 * @type {number}
-	 */
-	count: null,
-	/**
-	 * レス番号とSLIPコテハンの対応テーブル
-	 * @type {Object}
-	 */
-	slipItems: [],
-	/**
-	 * システム要素の総個数（処理済み判定用）
-	 * @type {number}
-	 */
-	countResSys: null,
-	/**
-	 * 取得したすべての名前欄要素
-	 * @type {Array<Element>}
-	 */
-	node_cache: null,
-	/**
-	 * スタイルシート
-	 * @type {StyleSheet}
-	 */
-	_style: null,
-	/**
-	 * SLIPコテハンの色設定
-	 * @type {Array<string>}
-	 */
-	_colors: [],
-	/**
-	 * SLIPコテハンの色設定の発言回数しきい値
-	 * @type {Array<number>}
-	 */
-	_thresholds: [],
-	/**
-	 * SLIPコテハンの色設定個数
-	 * @type {number}
-	 */
-	_lvnum: 0,
-	/**
-	 * SLIPコテハンを分解して処理
-	 * @type {boolean}
-	 */
-	_isDivide: false,
-	/**
-	 * SLIPコテハンを色分けする
-	 */
-	_isColor: false,
+class NameManager {
+	constructor() {
+		this.log = new SkinLog("Name", SkinLogLvl.WARNING);
+		this.items = [];
+		this.count = null;
+		this.slipItems = [];
+		this.countResSys = null;
+		this.node_cache = null;
+		this._style = null;
+		this._colors = [];
+		this._thresholds = [];
+		this._lvnum = 0;
+		this._isDivide = false;
+		this._isColor = false;
+	}
 	/**
 	 * プロパティを初期設定します。
 	 */
@@ -1567,78 +1471,62 @@ var Name = {
 		this.count = 0;
 		this._isColor = SkinPref.get("enableColoringSLIP");
 		this._isDivide = SkinPref.get("enableDivideSLIP");
-	},
+	}
 	/**
 	 * 処理を再度行って表示を更新します。
 	 */
 	update(){
 		this.init();
 		this.countSLIPs();
-	},
+	}
 	/**
 	 * 名前欄のresSystemクラスの要素を調べ、SLIPコテハンなら要素に分解して対応テーブルを作ります。
-	 *
-	 * @example
-	 * SLIPコテハンのフォーマットは以下の通り
-	 * vvv         : (ﾆｯｸﾈｰﾑ)
-	 * vvvv        : (ﾆｯｸﾈｰﾑ IPまたは端末ID)
-	 * vvvv(浪人)  : (ﾆｯｸﾈｰﾑ IPまたは端末ID)●
-	 * vvvvv       : (ﾆｯｸﾈｰﾑ KOROKORO)
-	 * vvvvvv      : (ﾆｯｸﾈｰﾑ KOROKORO [IPまたは端末ID])
-	 * vvvvvv(浪人): (ﾆｯｸﾈｰﾑ KOROKORO [IPまたは端末ID [上級国民]])
-	 * KOROKORO    : 4桁英数記号-4桁英数記号
-	 *
-	 * 固定回線とモバイル回線の区別は一応ニックネームが回線種別を示すが、これはイベントや気まぐれで上書きされる可能性があるのでこれによる判定は無理
-	 * vvvvの端末IDとvvvvvのKOROKOROの区別が付かない可能性があるが、vvvvvとのマッチングを優先（つまり vvvvvv -> vvvの順）とする
-	 * KOROKOROを細分化しても仕様がたびたび変わるようだし、マイナスの前と後の２つに分割とする
-	 * vvv形式は !ken などと同じだが使用されている文字がすべて半角カナ（または特定ワード）かどうかで区別できる
 	 */
 	scanResSys(){
 		const isDivide = this._isDivide;
 		this.slipItems = [];
 		Array.from(Nodes.content.querySelectorAll('.resName .resSystem')).forEach((elem) => {
 			let html = elem.innerHTML;
-			let str = null;
-			if((str = /^\((\S+) (\S{4})-(\S{4}) \[(\S+)( \[上級国民\])?\]\)$/.exec(html))){
-				// vvvvvv
+			const matchv6 = html.match(/^\((\S+) (\S{4})-(\S{4}) \[(\S+)( \[上級国民\])?\]\)$/);
+			const matchv5 = html.match(/^\((\S+) (\S{4})-(\S{4})\)$/);
+			const matchv4 = html.match(/^\((\S+) (\S+)\)(●)?$/);
+			const matchv3 = html.match(/^\((\S+)\)$/);
+
+			if(matchv6){
 				if(isDivide){
-					const ronin = str[5] ? str[5] : '';
-					html = '(<span class="slipName">' + str[1] + '</span> <span class="slipAB">' +
-						   str[2] + '</span>-<span class="slipC">' + str[3] + '</span> [<span class="slipIP">' +
-						   str[4] + '</span>' + ronin + '])';
+					const ronin = matchv6[5] ? matchv6[5] : '';
+					html = '(<span class="slipName">' + matchv6[1] + '</span> <span class="slipAB">' +
+						   matchv6[2] + '</span>-<span class="slipC">' + matchv6[3] + '</span> [<span class="slipIP">' +
+						   matchv6[4] + '</span>' + ronin + '])';
 					elem.innerHTML = html;
 				}else{
 					this.add(this.slipItems, elem.textContent, elem);
 				}
 			}
-			else if((str = /^\((\S+) (\S{4})-(\S{4})\)$/.exec(html))){
-				// vvvvv
+			else if(matchv5){
 				if(isDivide){
-					html = '(<span class="slipName">' + str[1] + '</span> <span class="slipAB">' +
-						   str[2] + '</span>-<span class="slipC">' + str[3] + '</span>)';
+					html = '(<span class="slipName">' + matchv5[1] + '</span> <span class="slipAB">' +
+						   matchv5[2] + '</span>-<span class="slipC">' + matchv5[3] + '</span>)';
 					elem.innerHTML = html;
 				}else{
 					this.add(this.slipItems, elem.textContent, elem);
 				}
 			}
-			else if((str = /^\((\S+) (\S+)\)(●)?$/.exec(html))){
-				// vvvv
+			else if(matchv4){
 				if(isDivide){
-					const ronin = str[3] ? str[3] : '';
-					html = '(<span class="slipName">' + str[1] + '</span> <span class="slipIP">' +
-						   str[2] + '</span>)' + ronin;
+					const ronin = matchv4[3] ? matchv4[3] : '';
+					html = '(<span class="slipName">' + matchv4[1] + '</span> <span class="slipIP">' +
+						   matchv4[2] + '</span>)' + ronin;
 					elem.innerHTML = html;
 				}else{
 					this.add(this.slipItems, elem.textContent, elem);
 				}
 			}
-			else if((str = /^\((\S+)\)$/.exec(html))){
-				// vvv or !ken ？
-				const name = str[1];
+			else if(matchv3){
+				const name = matchv3[1];
 				if(/^[｡｢｣､･ｦｧｨｩｪｫｬｭｮｯｰｱｲｳｴｵｶｷｸｹｺｻｼｽｾｿﾀﾁﾂﾃﾄﾅﾆﾇﾈﾉﾊﾋﾌﾍﾎﾏﾐﾑﾒﾓﾔﾕﾖﾗﾘﾙﾚﾛﾜﾝﾞﾟ0-9A-Z]+$/.test(name)){
 					elem.className = "resSystem resSlip";
 					if(isDivide){
-						// vvv
 						html = '(<span class="slipName">' + name + '</span>)';
 						elem.innerHTML = html;
 					}else{
@@ -1649,7 +1537,6 @@ var Name = {
 					for(let i = 0, n = spName.length; i < n; i++){
 						if(name === spName[i]){
 							if(isDivide){
-								// vvv
 								html = '(<span class="slipName">' + name + '</span>)';
 								elem.innerHTML = html;
 							}else{
@@ -1668,7 +1555,7 @@ var Name = {
 				this.add(this.slipItems, name, slip);
 			});
 		}
-	},
+	}
 	/**
 	 * 名前欄を走査して対応テーブルを作ります。
 	 */
@@ -1679,29 +1566,24 @@ var Name = {
 		const nameItems = ResNodes.getNames();
 		const n = nameItems.length;
 		if(n === this.count) return false;
-		// SLIP
 		if(this._isColor || this._isDivide) this.scanResSys();
-		// Name
 		this.node_cache = nameItems;
 		this.count = n;
 		this.items = [];
 		nameItems.forEach((elem) => {
-			const resNum = parseInt(elem.parentNode.parentNode.getAttribute("res"));
+			const resNum = parseInt(elem.parentNode.parentNode.getAttribute("res"), 10);
 			if(resNum) this.add(this.items, elem.textContent, resNum);
 		});
 		return true;
-	},
+	}
 	/**
 	 * 指定テーブルにデータを追加します。
-	 * @param {Array<*>}	table	テーブル
-	 * @param {string}		key		テーブルのキー
-	 * @param {*}			data	追加するデータ
 	 */
 	add(table,key,data){
 		this.log.dbg("add(table," + key + ",data)");
 		if(!table[key]) table[key] = [];
 		table[key].push(data);
-	},
+	}
 	/**
 	 * SLIPコテハンの色分けスタイルを作成します。
 	 */
@@ -1713,7 +1595,7 @@ var Name = {
 		}else{
 			this._colors.forEach((color, i) => this._style.insert('.resSystem[lv="' + (i + 1) + '"] { background-color: ' + color + '; }'));
 		}
-	},
+	}
 	/**
 	 * 名前ごとのレスを集計し、オプションで2chのSLIPコテハン部の色分けを行います。
 	 */
@@ -1747,69 +1629,28 @@ var Name = {
 			}
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Name = new NameManager();
+
 
 /**
- * ID を走査して、レス番号と ID の対応テーブルを管理します。
- * @namespace
+ * ID を走査して、レス番号と ID の対応テーブルを管理するクラス
  */
-var ID = {
-	log: new SkinLog("ID", SkinLogLvl.WARNING),
-	/**
-	 * レス番号と ID の対応テーブル
-	 * @type {Object}
-	 * @example
-	 * {
-	 *     "hogehoge": [1, 3, 5],
-	 *     "foobar":   [200, 201, 208]
-	 * }
-	 */
-	items: [],
-	/**
-	 * ID の総個数（無効なIDも含む）
-	 * @type {number}
-	 */
-	count: null,
-	/**
-	 * 取得したすべてのID欄要素（無効なIDも含む）
-	 * @type {Array<Element>}
-	 */
-	node_cache: null,
-	/**
-	 * スタイルシート
-	 * @type {StyleSheet}
-	 */
-	_style: null,
-	/**
-	 * IDの色設定
-	 * @type {Array<string>}
-	 */
-	_colors: [],
-	/**
-	 * IDの色設定の発言回数しきい値
-	 * @type {Array<number>}
-	 */
-	_thresholds: [],
-	/**
-	 * IDの発言回数を表示
-	 * @type {boolean}
-	 */
-	_isCount: false,
-	/**
-	 * IDを色分けする
-	 * @type {boolean}
-	 */
-	_isColor: false,
-	/**
-	 * colleのIDアイコン表示
-	 * @type {boolean}
-	 */
-	_isIDIcon: false,
-	/**
-	 * IDの発言回数にインデックスつける
-	 * @type {boolean}
-	 */
-	_isShowIdx: false,
+class IDManager {
+	constructor() {
+		this.log = new SkinLog("ID", SkinLogLvl.WARNING);
+		this.items = [];
+		this.count = null;
+		this.node_cache = null;
+		this._style = null;
+		this._colors = [];
+		this._thresholds = [];
+		this._isCount = false;
+		this._isColor = false;
+		this._isIDIcon = false;
+		this._isShowIdx = false;
+	}
 	/**
 	 * プロパティを初期設定します。
 	 */
@@ -1819,23 +1660,21 @@ var ID = {
 		this._isColor = SkinPref.get("enableColoringID");
 		this._isIDIcon = SysPref.enableIDIconforColle && (SkinPref.get("valueSkinStyle") === 5);
 		this._isShowIdx = SkinPref.get("enableShowIDCountIndex");
-	},
+	}
 	/**
 	 * 処理を再度行って表示を更新します。
 	 */
 	update(){
 		this.init();
 		this.countIDs();
-	},
+	}
 	/**
 	 * 有効なIDか判定します。
-	 * @param {string}	id	ID文字列
-	 * @return {boolean}	有効なIDか
 	 */
 	isValidID(id){
 		if(!id || id.length < 3 || id.indexOf("???") !== -1) return false;
 		return true;
-	},
+	}
 	/**
 	 * ID を走査して、対応テーブルを作ります。
 	 */
@@ -1853,7 +1692,7 @@ var ID = {
 		idItems.forEach((node) => {
 			const id = node.getAttribute("rel");
 			if(this.isValidID(id)){
-				const resNum = parseInt(node.parentNode.parentNode.getAttribute("res"));
+				const resNum = parseInt(node.parentNode.parentNode.getAttribute("res"), 10);
 				if(resNum){
 					if(!this.items[id]) this.items[id] = [];
 					this.items[id].push(resNum);
@@ -1861,7 +1700,7 @@ var ID = {
 			}
 		});
 		return true;
-	},
+	}
 	/**
 	 * IDの色分けスタイルを作成
 	 */
@@ -1872,10 +1711,9 @@ var ID = {
 		this._colors.forEach((color, i) => {
 			this._style.insert('.resID[lv="' + (i + 1) + '"], .resMesID span[lv="' + (i + 1) + '"] { color: ' + color + '; }');
 		});
-	},
+	}
 	/**
 	 * IDごとのレスを集計し、ID欄の色分けおよび発言回数表示を追加します。
-	 * @param {boolean}	[update]	オプション変更後の更新の場合true
 	 */
 	countIDs(){
 		if(ID.traverse()){
@@ -1897,8 +1735,8 @@ var ID = {
 			ID.node_cache.forEach((elem) => {
 				const id = elem.getAttribute("rel");
 				const icon = this._isIDIcon ? Nodes.getResIDIcon(elem.parentNode) : null;
-				let lv = 0
-				if(ID.isValidID(id) && !(!ID.items[id])){
+				let lv = 0;
+				if(ID.isValidID(id) && ID.items[id]){
 					const cnt = ID.items[id].length;
 					if(cnt > 1){
 						if(this._isCount){
@@ -1927,8 +1765,9 @@ var ID = {
 			ResNodes.getResMesIDs().forEach((elem) => {
 				const anchorNode = elem.children[0];
 				let lv = 0;
-				if(anchorNode.className.match(/mesID_([^\s]+)/)){
-					const id = RegExp.$1;
+				const matchMesID = anchorNode.className.match(/mesID_([^\s]+)/);
+				if(matchMesID){
+					const id = matchMesID[1];
 					if(ID.items[id]){
 						if(this._isColor){
 							const cnt = ID.items[id].length;
@@ -1945,56 +1784,46 @@ var ID = {
 			});
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ID = new IDManager();
+
 
 /**
- * レスアンカーを走査して、レス番号とレス元の番号との対応テーブルを管理します。
- * @namespace
+ * レスアンカーを走査して、レス番号とレス元の番号との対応テーブルを管理するクラス
  */
-var Trackback = {
-	log: new SkinLog("Trackback", SkinLogLvl.WARNING),
-	/**
-	 * レス番号とレス元の番号との対応テーブル
-	 * @type {Object}
-	 * @example
-	 * {
-	 *     "1": [2, 3, 4, 5],
-	 *     "4": [5],
-	 *     "6": [8]
-	 * }
-	 */
-	items: [],
-	/**
-	 * 走査したレスの件数
-	 * @type {number}
-	 */
-	count: null,
+class TrackbackManager {
+	constructor() {
+		this.log = new SkinLog("Trackback", SkinLogLvl.WARNING);
+		/**
+		 * レス番号とレス元の番号との対応テーブル
+		 * @type {Object}
+		 */
+		this.items = [];
+		/**
+		 * 走査したレスの件数
+		 * @type {number}
+		 */
+		this.count = null;
+	}
 	/**
 	 * 全角文字で表記された数字を、数値型に変換します。
-	 * @param {string} str 全角数字が含まれた文字列
-	 * @return {number} 変換された数値
 	 */
 	toNarrow(str){
-		return parseInt(str.replace(/([\uFF10-\uFF19])/g, (n) => { return String.fromCharCode(n.charCodeAt(0) - 0xFEE0); }));
-	},
+		return parseInt(str.replace(/([\uFF10-\uFF19])/g, (n) => { return String.fromCharCode(n.charCodeAt(0) - 0xFEE0); }), 10);
+	}
 	/**
 	 * 指定のレス番号についたレスの数を取得します。
-	 * @param {number} resNum	レス番号
-	 * @return {number} レスの数
 	 */
 	getCount(resNum){
 		this.log.info("getCount(" + resNum + ")");
 		if(!this.items[resNum]) return 0;
 		return this.items[resNum].length;
-	},
+	}
 	/**
 	 * 指定のレス番号についたレスについて、レスアンカーのリストを生成して返します。
-	 * @param {number} resNum レス番号
-	 * @return {DocumentFragment} 要素
 	 */
 	getAnchorElements(resNum){
-		const fn = "getAnchorElements(" + resNum + ")";
-		this.log.info(fn);
 		if(!this.items[resNum]) return null;
 		const content = _doc.createDocumentFragment();
 		const span = _doc.createElement("span");
@@ -2014,15 +1843,11 @@ var Trackback = {
 			}
 		}
 		return content;
-	},
+	}
 	/**
 	 * 指定の要素に、逆参照情報を追加します。
-	 * @param {Element}			content	要素
-	 * @param {number/string}	resNum	レス番号 または レス番号をカンマで列挙した文字列
 	 */
 	appendTo(content, resNum){
-		const fn = "appendTo(content," + resNum + ")";
-		this.log.info(fn);
 		if(!this.items[resNum]) return;
 		const e = _doc.createElement("span");
 		e.className = "trackBack";
@@ -2030,14 +1855,11 @@ var Trackback = {
 		e.appendChild(this.getAnchorElements(resNum));
 		e.appendChild(_doc.createTextNode(")"));
 		content.appendChild(e);
-	},
+	}
 	/**
 	 * レスを走査して、対応テーブルを作ります。
-	 * @param {boolean} force	強制再走査
 	 */
 	traverse(force){
-		const fn = "traverse(" + force + ")";
-		this.log.info(fn);
 		if(force) this.count = 0;
 		const TRACKBACK_LIMIT = 20;
 		const expAnchor = new RegExp(/([0-9\uFF10-\uFF19]{1,4})[\-\uFF0D]?([0-9\uFF10-\uFF19]{0,4})/);
@@ -2049,12 +1871,13 @@ var Trackback = {
 		ResNodes.getResAnchors().forEach((anchor) => {
 			const parent_node = anchor.parentNode;
 			anchor.textContent.split(",").forEach((str) => {
-				if(str.match(expAnchor)){
-					const start = this.toNarrow(RegExp.$1);
-					let end = RegExp.$2;
+				const matchAnchor = str.match(expAnchor);
+				if(matchAnchor){
+					const start = this.toNarrow(matchAnchor[1]);
+					let end = matchAnchor[2];
 					end = end ? this.toNarrow(end) : start;
 					if((end - start) < TRACKBACK_LIMIT){
-						let srcIndex = parent_node.id.slice(4); // body
+						let srcIndex = parent_node.id.slice(4);
 						srcIndex = srcIndex ? srcIndex : parent_node.parentNode.id.slice(4);
 						if(srcIndex){
 							for(let destIndex = start; destIndex <= end; destIndex++){
@@ -2071,31 +1894,35 @@ var Trackback = {
 			});
 		});
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Trackback = new TrackbackManager();
+
 
 /**
- * IDの抽出機能を管理します。
- * @namespace
+ * IDの抽出機能を管理するクラス
  */
-var IDExtract = {
-	log: new SkinLog("IDExtract", SkinLogLvl.WARNING),
+class IDExtractManager {
+	constructor() {
+		this.log = new SkinLog("IDExtract", SkinLogLvl.WARNING);
+		/**
+		 * 抽出中の ID
+		 * @type {string}
+		 */
+		this.id = "";
+		/**
+		 * Ctrlキー必要
+		 * @type {boolean}
+		 */
+		this._hotkey = false;
+		/**
+		 * 抽出する
+		 * @type {boolean}
+		 */
+		this._pickup = false;
+	}
 	/**
-	 * 抽出中の ID (obsolete)
-	 * @type {string}
-	 */
-	id: "",
-	/**
-	 * Ctrlキー必要
-	 * @type {boolean}
-	 */
-	_hotkey: false,
-	/**
-	 * 抽出する
-	 * @type {boolean}
-	 */
-	_pickup: false,
-	/**
-	 * スレッド表示のオプションで抽出が要求された場合、指定された ID を持つレスのみを表示します。(obsolete)
+	 * スレッド表示のオプションで抽出が要求された場合、指定された ID を持つレスのみを表示します。
 	 */
 	init(){
 		const fn = "init()";
@@ -2124,24 +1951,22 @@ var IDExtract = {
 
 		ThreadDocument.status = id + " のレス (" + idCount + "回)";
 		ThreadDocument.setStatus();
-		IDExtract.id = id;
-	},
+		this.id = id;
+	}
 	/**
 	 * プロパティを更新します。
 	 */
 	update(){
 		this._hotkey = (SkinPref.get("valueIDPickupHotkey") > 0);
 		this._pickup = (SkinPref.get("valueIDPickupResult") > 0);
-	},
+	}
 	/**
 	 * イベントを処理します。
-	 * @param {event}	e	イベント
 	 */
 	handleEvent(e){
 		let class_name = e.target.className;
 		switch(e.type){
 		case "click":
-			// 指定された ID を抽出します
 			if(this._hotkey && !e.ctrlKey) return;
 			if(class_name.match(/^resID/)){
 				Nodes.findBoxText.value = "id:"  + e.target.getAttribute("rel");
@@ -2156,30 +1981,33 @@ var IDExtract = {
 			FindBox.find(true, this._pickup);
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var IDExtract = new IDExtractManager();
+
 
 /**
- * レス番号部のイベント処理を管理します。
- * @namespace
+ * レス番号部のイベント処理を管理するクラス
  */
-var ResNumber = {
-	log: new SkinLog("ResNumber", SkinLogLvl.WARNING),
+class ResNumberManager {
+	constructor() {
+		this.log = new SkinLog("ResNumber", SkinLogLvl.WARNING);
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
 	startup(){
 		this.log.info("init()");
 		window.addEventListener("click", this, true);
-	},
+	}
 	/**
 	 * イベントを処理します。
-	 * @param {event}	e	イベント
 	 */
 	handleEvent(e){
 		if(e.type !== "click") return;
 		try{
 			if(!e.target.parentNode.classList.contains("resNumber")) return;
-		}catch(e){
+		}catch(err){
 			return;
 		}
 		const container = ResNodes.getParentContainer(e.target);
@@ -2189,108 +2017,120 @@ var ResNumber = {
 			ThreadDocument.writeTo(resNum);
 			e.preventDefault();
 			break;
-		case 1:		// ミドルクリック
+		case 1:
 			ResImage.embed(container, e.ctrlKey);
 			e.preventDefault();
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ResNumber = new ResNumberManager();
+
+
 
 /**
- * 画像・動画のインライン表示を管理します。
- * @namespace
+ * 画像・動画のインライン表示を管理するクラス
  */
-var ResImage = {
-	log: new SkinLog("ResImage", SkinLogLvl.WARNING),
-	/**
-	 * 埋め込み画像・動画フレームの配列
-	 * @type {NodeList}
-	 */
-	imageList: [],
-	/**
-	 * マウスオーバー監視中
-	 * @type {boolean}
-	 */
-	enableMouseOver: false,
-	/**
-	 * 遅延読み込み処理中
-	 * @type {boolean}
-	 */
-	isLoading: false,
-	/**
-	 * 表示範囲外もすべて読み込む
-	 * @type {boolean}
-	 */
-	isPreload: false,
-	/**
-	 * 埋め込み画像をサムネイルにする
-	 * @type {boolean}
-	 */
-	isThumbnailImg: false,
-	/**
-	 * 埋め込みGIFをサムネイルにする
-	 * @type {boolean}
-	 */
-	isThumbnailGif: false,
-	/**
-	 * 遅延読込用タイムアウトID
-	 * @type {number}
-	 */
-	timeoutID: null,
-	/**
-	 * 遅延読込予約リスト
-	 * @type {NodeList}
-	 */
-	lazyItem: [],
-	/**
-	 * 同時読み込みカウンタ
-	 * @type {number}
-	 */
-	loadCount: 0,
-	/**
-	 * 読み込み完了数
-	 * @type {number}
-	 */
-	doneCount: 0,
-	/**
-	 * 読み込みエラー数
-	 * @type {number}
-	 */
-	errorCount: 0,
-	/**
-	 * 同時読み込み上限数
-	 * @type {number}
-	 */
-	loadMax: 0,
-	/**
-	 * 同時読み込み下限数
-	 * @type {number}
-	 */
-	loadMin: 0,
-	/**
-	 * 読込間隔msec
-	 * @type {number}
-	 */
-	interval: 0,
+class ResImageManager {
+	constructor() {
+		this.log = new SkinLog("ResImage", SkinLogLvl.WARNING);
+		/**
+		 * 埋め込み画像・動画フレームの配列
+		 * @type {Array<Element>}
+		 */
+		this.imageList = [];
+		/**
+		 * マウスオーバー監視中
+		 * @type {boolean}
+		 */
+		this.enableMouseOver = false;
+		/**
+		 * 遅延読み込み処理中
+		 * @type {boolean}
+		 */
+		this.isLoading = false;
+		/**
+		 * 表示範囲外もすべて読み込む
+		 * @type {boolean}
+		 */
+		this.isPreload = false;
+		/**
+		 * 埋め込み画像をサムネイルにする
+		 * @type {boolean}
+		 */
+		this.isThumbnailImg = false;
+		/**
+		 * 埋め込みGIFをサムネイルにする
+		 * @type {boolean}
+		 */
+		this.isThumbnailGif = false;
+		/**
+		 * 遅延読込用タイムアウトID
+		 * @type {number}
+		 */
+		this.timeoutID = null;
+		/**
+		 * 遅延読込予約リスト
+		 * @type {Array<Element>}
+		 */
+		this.lazyItem = [];
+		/**
+		 * 同時読み込みカウンタ
+		 * @type {number}
+		 */
+		this.loadCount = 0;
+		/**
+		 * 読み込み完了数
+		 * @type {number}
+		 */
+		this.doneCount = 0;
+		/**
+		 * 読み込みエラー数
+		 * @type {number}
+		 */
+		this.errorCount = 0;
+		/**
+		 * 同時読み込み上限数
+		 * @type {number}
+		 */
+		this.loadMax = 0;
+		/**
+		 * 同時読み込み下限数
+		 * @type {number}
+		 */
+		this.loadMin = 0;
+		/**
+		 * 読込間隔msec
+		 * @type {number}
+		 */
+		this.interval = 0;
+		this.imageSizeIdx = 0;
+		this.videoSizeIdx = 0;
+		this.isEmbedVideo = false;
+		this.isNoPopup = false;
+		this.isGroup = false;
+		this.isThumnailImg = false;
+		this.isThumnailGif = false;
+		/**
+		 * 強制埋め込みモード
+		 * @type {boolean}
+		 */
+		this.forceEmbed = false;
+	}
 	/**
 	 * 埋め込み画像のサイズ
 	 * @type {Object}
 	 */
 	get imageSize(){
 		return SelOpts.EmbedImageSize[this.imageSizeIdx];
-	},
+	}
 	/**
 	 * 埋め込み動画のサイズ
 	 * @type {Object}
 	 */
 	get videoSize(){
 		return SelOpts.EmbedVideoSize[this.videoSizeIdx];
-	},
-	/**
-	 * 強制埋め込みモード
-	 * @type {boolean}
-	 */
-	forceEmbed: false,
+	}
 	/**
 	 * プロパティを初期設定します。
 	 */
@@ -2306,16 +2146,15 @@ var ResImage = {
 		this.isGroup = SkinPref.get("enableEmbedImageGroup");
 		this.isThumnailImg = SkinPref.get("enableThumbnailImage");
 		this.isThumnailGif = !SkinPref.get("enableThumbnailWithoutGif");
-	},
+	}
 	/**
 	 * プロパティを更新します。
 	 */
 	update(){
 		this.init();
-	},
+	}
 	/**
 	 * イベントを処理します。
-	 * @param {event}	e	イベント
 	 */
 	handleEvent(e){
 		switch(e.type){
@@ -2331,8 +2170,6 @@ var ResImage = {
 					}else{
 						this.loadVideo(target, target.getAttribute("src"));
 					}
-				}else{
-					console.log("mouseover: <" + target.tagName + "> ." + target.className);
 				}
 				break;
 			}
@@ -2350,7 +2187,7 @@ var ResImage = {
 						const maxW = this.imageSize.width, maxH = this.imageSize.height;
 						const srcW = target.naturalWidth,  srcH = target.naturalHeight;
 						const f = (srcW > srcH ? maxW / srcW : maxH / srcH) * 2;
-						if(!this.isThumnailImg || isGif && !this.isThumnailGif){
+						if(!this.isThumnailImg || (isGif && !this.isThumnailGif)){
 							target.className = "embedImage";
 							target.style.maxWidth = maxW + "px";
 							target.style.maxHeight = maxH + "px";
@@ -2369,11 +2206,11 @@ var ResImage = {
 							const ctx = canvas.getContext("2d");
 							try{
 								ctx.drawImage(target, 0, 0, srcW, srcH, 0, 0, dstW, dstH);
-							}catch(e){
-								this.log.warn(e);
+							}catch(err){
+								this.log.warn(err);
 							}
 							parent.removeChild(target);
-							target = null;	// 明示的にImageオブジェクトを開放
+							target = null;
 							parent.appendChild(canvas);
 							parent.style.width = canvas.offsetWidth + "px";
 							parent.style.height = canvas.offsetHeight + "px";
@@ -2383,9 +2220,7 @@ var ResImage = {
 						parent.style.height = target.offsetHeight + "px";
 					}
 
-					if(this.isLoading && this.loadCount < this.loadMin) this.checkLazyload();	// 読み込み数が下限切ったら追加
-				}else{
-					console.log("load: <" + target.tagName + "> ." + target.className);
+					if(this.isLoading && this.loadCount < this.loadMin) this.checkLazyload();
 				}
 				this.checkFinish();
 				break;
@@ -2404,21 +2239,15 @@ var ResImage = {
 					parent.style.width = "16px";
 					parent.style.height = "16px";
 
-					if(this.isLoading && this.loadCount < this.loadMin) this.checkLazyload();	// 読み込み数が下限切ったら追加
-				}else{
-					console.log("error: <" + target.tagName + "> ." + target.className);
+					if(this.isLoading && this.loadCount < this.loadMin) this.checkLazyload();
 				}
 				this.checkFinish();
 				break;
 			}
 		}
-	},
+	}
 	/**
 	 * 埋め込み画像・動画の遅延読込を開始します。
-	 * 画像・動画要素は初期スクロール位置での画面表示範囲からの距離でソートして保持しておき
-	 * 見えてる箇所から順次読み込みを行います。
-	 * 表示範囲外の先読みが設定されていない場合はスクロールのイベントリスナを追加し、
-	 * 表示範囲のみ読み込みを行います。
 	 */
 	startLazyload(){
 		const fn = "startLazyload()";
@@ -2432,14 +2261,10 @@ var ResImage = {
 		}
 
 		const middleOffset = _doc.body.scrollTop + _doc.body.clientHeight / 2 - window.pageYOffset;
-		// 埋め込み画像・動画要素をクエリし、それを表示範囲中央からの距離でソート
-		//console.time("sort imageList");
 		this.imageList = Array.from(_doc.querySelectorAll(sel)).sort((a, b) => {
 			return Math.abs((a.getBoundingClientRect()).top - middleOffset) -
 			       Math.abs((b.getBoundingClientRect()).top - middleOffset);
 		});
-		//console.timeEnd("sort imageList");
-		if(this.isPreload && this.imageList.length > 0) console.time("Lazyload");
 
 		this.lazyItem = [];
 		this.loadCount = 0;
@@ -2450,10 +2275,9 @@ var ResImage = {
 		if(!this.isPreload){
 			window.addEventListener("scroll", this, false);
 		}
-	},
+	}
 	/**
 	 * 埋め込み画像・動画の遅延読込を終了します。
-	 * 表示範囲外の先読みが設定されていない場合はスクロールのイベントリスナを削除します。
 	 */
 	endLazyload(){
 		this.log.info("endLazyload()");
@@ -2461,11 +2285,9 @@ var ResImage = {
 			window.removeEventListener("scroll", this, false);
 		}
 		this.isLoading = false;
-	},
+	}
 	/**
 	 * 埋め込み画像・動画要素に対して遅延読込を予約します。
-	 * 同時読み込み数の上限に満たない場合に、要素の上端座標が表示範囲内に入っているか
-	 * 表示範囲外の先読みが設定されている場合に予約リストに追加します。
 	 */
 	checkLazyload(){
 		const viewTop = _doc.body.scrollTop;
@@ -2480,26 +2302,26 @@ var ResImage = {
 				const top = (frame.getBoundingClientRect()).top + window.pageYOffset;
 				if(this.loadCount < this.loadMax){
 					this.log.dbg("viewTop=" + viewTop + ", viewBottom=" + viewBottom + ", top=" + top);
-					if(viewTop < top && top < viewBottom || this.isPreload){
+					if((viewTop < top && top < viewBottom) || this.isPreload){
 						frame.setAttribute("state", "lazy");
 						this.lazyItem.push(frame);
 						this.loadCount++;
 						return;
 					}
 				}
-				remain++;	// 残りカウント
+				remain++;
 			}
 		});
 		this.log.info("checkLazyload() queue=" + this.lazyItem.length + ", remain=" + remain + "/" + this.imageList.length);
-		if(remain === 0) ResImage.endLazyload();
+		if(remain === 0) this.endLazyload();
 
 		if(this.lazyItem.length > 0){
 			if(this.timeoutID){
 				window.clearTimeout(this.timeoutID);
 			}
-			this.timeoutID = window.setTimeout(ResImage.execLazyload.bind(ResImage), this.interval);
+			this.timeoutID = window.setTimeout(this.execLazyload.bind(this), this.interval);
 		}
-	},
+	}
 	/**
 	 * 予約済みの画像・動画の遅延読込を実行します。
 	 */
@@ -2516,33 +2338,28 @@ var ResImage = {
 		}
 
 		if(this.lazyItem.length > 0){
-			this.timeoutID = window.setTimeout(ResImage.execLazyload.bind(ResImage), this.interval);
+			this.timeoutID = window.setTimeout(this.execLazyload.bind(this), this.interval);
 		}
-	},
+	}
 	/**
 	 * 埋め込み画像要素を作成して読み込みます。
-	 * @param {Element} frame		埋め込みフレーム要素
-	 * @param {string}	src			埋め込み画像のソースURI
 	 */
 	loadImage(frame, src){
 		this.log.dbg("loadImage(frame,src=" + src + ")");
-		const size = ResImage.imageSize;
+		const size = this.imageSize;
 		frame.removeEventListener("mouseover", this, false);
 		frame.setAttribute("state", "loading");
 		const img = new Image();
 		img.style.maxWidth = size.width + "px";
-		img.style.maxHeight = size.Height + "px";
+		img.style.maxHeight = size.height + "px";
 		img.style.visibility = "hidden";
 		img.addEventListener("load", this, false);
 		img.addEventListener("error", this, false);
-		// 画像の読み込みは onload/onerror を登録したあとに開始
 		img.src = src;
 		frame.appendChild(img);
-	},
+	}
 	/**
 	 * 埋め込み動画要素を作成して読み込みます。
-	 * @param {Element} frame		埋め込みフレーム要素
-	 * @param {string}	src			埋め込み動画のソースURI
 	 */
 	loadVideo(frame, src){
 		this.log.dbg("loadVideo(frame,src=" + src + ")");
@@ -2553,10 +2370,9 @@ var ResImage = {
 		video.addEventListener("load", this, false);
 		video.addEventListener("error", this, false);
 		frame.appendChild(video);
-	},
+	}
 	/**
 	 * 画像・動画の読込監視を開始します。
-	 * 自動読込が有効の場合遅延読込を開始し、無効の場合はmouseoverイベントのリスナを登録します。
 	 */
 	watch(){
 		this.log.info("watch()");
@@ -2565,31 +2381,27 @@ var ResImage = {
 				window.removeEventListener("mouseover", this, false);
 				this.enableMouseOver = false;
 			}
-			if(ThreadDocument.isLoaded()) ResImage.startLazyload();
+			if(ThreadDocument.isLoaded()) this.startLazyload();
 		}else{
 			if(!this.enableMouseOver){
 				window.addEventListener("mouseover", this, false);
 				this.enableMouseOver = true;
 			}
 		}
-	},
+	}
 	/**
 	 * 画像・動画の読込が完了したときに呼ばれます。
 	 */
 	checkFinish(){
 		if(this.imageList.length === (this.doneCount + this.errorCount)){
 			this.imageList = [];
-			console.timeEnd("Lazyload");
-			console.log("success=" + this.doneCount + ", error=" + this.errorCount);
+			this.log.info("Lazyload Finished: success=" + this.doneCount + ", error=" + this.errorCount);
 		}
-	},
+	}
 	/**
 	 * 画像・動画をインライン表示します
-	 * @param {Element} contextNode	評価する親ノード
-	 * @param {boolean} noCheck		グロ画像チェックをしない
 	 */
 	embed(contextNode, noCheck){
-//		console.time("ResImage.embed");
 		const fn = "embed(contextNode," + noCheck + ")";
 		this.log.info(fn);
 		const embed_class = (this.isGroup) ? "embedLast" : "embedInline";
@@ -2597,7 +2409,7 @@ var ResImage = {
 		const videoSize = this.videoSize;
 
 		if(this.forceEmbed){
-			for(let node of contextNode.querySelectorAll(".resBody ." + embed_class)){
+			for(let node of (contextNode || Nodes.content).querySelectorAll(".resBody ." + embed_class)){
 				const parent = node.parentNode;
 				parent.removeChild(node);
 			}
@@ -2610,16 +2422,12 @@ var ResImage = {
 
 			if(blocked) return;
 			if(ImagePopup.isImage(src)){
-				/*
-				 * 画像リンク
-				 */
 				if(!noCheck){
-					// グロチェック
 					if(ImagePopup.isImageGrotesque(ResNodes.getResNumByOutLink(node))) return;
 				}
 				this.log.dbg("embed(): image url=" + node.href);
 				if(this.forceEmbed || !node.getAttribute("is_embed")){
-					if(this.isNoPopup) node.setAttribute("no_popup", true); // ポップアップを無効化
+					if(this.isNoPopup) node.setAttribute("no_popup", "true");
 
 					const frame = _doc.createElement("div");
 					frame.className = embed_class;
@@ -2638,20 +2446,16 @@ var ResImage = {
 					}else{
 						node.parentNode.insertBefore(frame, node.nextSibling);
 					}
-					node.setAttribute("is_embed", true);
+					node.setAttribute("is_embed", "true");
 				}
 			}
 			else if(this.isEmbedVideo){
 				if(this.forceEmbed || !node.getAttribute("is_embed")){
-					if(this.isNoPopup) node.setAttribute("no_popup", true); // ポップアップを無効化
+					if(this.isNoPopup) node.setAttribute("no_popup", "true");
 
-					const videoSrc = VideoPopup.getVideoSource(node.href,true);
+					const videoSrc = VideoPopup.getVideoSource(node.href, true);
 					if(!videoSrc) return;
-					/*
-					 * 動画リンク
-					 */
 					if(!noCheck){
-						// グロチェック
 						if(ImagePopup.isImageGrotesque(ResNodes.getResNumByOutLink(node))) return;
 					}
 					this.log.dbg("embed: video url=" + node.href);
@@ -2672,110 +2476,95 @@ var ResImage = {
 					}else{
 						node.parentNode.insertBefore(frame, node.nextSibling);
 					}
-					node.setAttribute("is_embed", true);
+					node.setAttribute("is_embed", "true");
 				}
 			}
 		});
 
 		this.watch();
-//		console.timeEnd("ResImage.embed");
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ResImage = new ResImageManager();
+
 
 /**
- * ショートカットキーを管理します。
- * @namespace
+ * ショートカットキーを管理するクラス
  */
-var KeyInput = {
-	log: new SkinLog("KeyInput", SkinLogLvl.WARNING),
-	/**
-	 * ショートカットキーと機能の対応を定義します。
-	 *
-	 * @example
-	 * キーアサインは '+' で連結（空白は入れない）して指定します。
-	 * 原則として印字可能キーは出力される文字をそのまま指定します。Space も ' ' です。
-	 * ただし大/小文字がある文字は小文字で指定します。
-	 * 使用できる修飾キー は 'Shift'、'Control'(Ctrl)、'Alt' のみで、
-	 * 連結する場合はこの順番で指定します。
-	 *
-	 * @see https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/getModifierState
-	 * @see https://developer.mozilla.org/en-US/docs/Web/API/KeyboardEvent/key
-	 */
-	keymap: {
-		'Escape': 		'Cancel',
-		'F5': 			'UpdateThread',
-		'n':			'ScrollToNew',
-		'Shift+Alt+l':	'ScrollToNew',
-		'j':			'ScrollToPrevPost',
-		'ArrowLeft':	'ScrollToPrevPost',
-		'k':			'ScrollToNextPost',
-		'ArrowRight':	'ScrollToNextPost',
-		'Control+ArrowUp':	'ScrollToTop',
-		'Control+ArrowDown':'ScrollToEnd',
-		'h':					'ScrollToPrevPage',
-		'Control+ArrowLeft':	'ScrollToPrevPage',
-		'l':					'ScrollToNextPage',
-		'Control+ArrowRight':	'ScrollToNextPage',
-		'Alt+ArrowDown':	'AutoScroll',
-		'w':			'OpenPostWizard',
-		'Control+Enter':'OpenPostWizard',
-		'Control+ ':	'ShowThreadAll',
-		'a':			'ToggleAutoReload',
-		'd':			'ToggleDigest',
-		'p':			'TogglePopular',
-		'f':				'ShowFindBox',
-		'Control+Alt+f':	'ShowFindBox',
-		'z':				'ShowAnalyseDialog',
-		'o':				'ShowOptionDialog',
-		'Alt+i': 		'EmbedImage',
-		'Control+Alt+i':'EmbedImageNoCheck'
-	},
-	/**
-	 * レス番号バッファ
-	 * @type {string}
-	 */
-	_numStr: "",
-	/**
-	 * 連続した数字キー入力と認識する間隔の最大値[ms]
-	 * @type {number}
-	 */
-	_thresholdTime: 800,
-	/**
-	 * タイムアウトID
-	 * @type {number}
-	 */
-	_timeoutId: null,
+class KeyInputManager {
+	constructor() {
+		this.log = new SkinLog("KeyInput", SkinLogLvl.WARNING);
+		this.keymap = {
+			'Escape': 		'Cancel',
+			'F5': 			'UpdateThread',
+			'n':			'ScrollToNew',
+			'Shift+Alt+l':	'ScrollToNew',
+			'j':			'ScrollToPrevPost',
+			'ArrowLeft':	'ScrollToPrevPost',
+			'k':			'ScrollToNextPost',
+			'ArrowRight':	'ScrollToNextPost',
+			'Control+ArrowUp':	'ScrollToTop',
+			'Control+ArrowDown':'ScrollToEnd',
+			'h':					'ScrollToPrevPage',
+			'Control+ArrowLeft':	'ScrollToPrevPage',
+			'l':					'ScrollToNextPage',
+			'Control+ArrowRight':	'ScrollToNextPage',
+			'Alt+ArrowDown':	'AutoScroll',
+			'w':			'OpenPostWizard',
+			'Control+Enter':'OpenPostWizard',
+			'Control+ ':	'ShowThreadAll',
+			'a':			'ToggleAutoReload',
+			'd':			'ToggleDigest',
+			'p':			'TogglePopular',
+			'f':				'ShowFindBox',
+			'Control+Alt+f':	'ShowFindBox',
+			'z':				'ShowAnalyseDialog',
+			'o':				'ShowOptionDialog',
+			'Alt+i': 		'EmbedImage',
+			'Control+Alt+i':'EmbedImageNoCheck'
+		};
+		/**
+		 * レス番号バッファ
+		 * @type {string}
+		 */
+		this._numStr = "";
+		/**
+		 * 連続した数字キー入力と認識する間隔の最大値[ms]
+		 * @type {number}
+		 */
+		this._thresholdTime = 800;
+		/**
+		 * タイムアウトID
+		 * @type {number}
+		 */
+		this._timeoutId = null;
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
 	startup(){
 		this.log.info("init()");
 		window.addEventListener("keypress", this, false);
-	},
+	}
 	/**
 	 * イベントの処理を行います。
-	 * @param {event} e イベント
 	 */
 	handleEvent(e){
 		let keyValue = e.key;
 		switch(e.type){
 		case "keypress":
 			if(e.defaultPrevented) return;
-			if(/textarea|input|select|button/i.test(e.target.tagname)) return;
+			if(/textarea|input|select|button/i.test(e.target.tagName)) return;
 			if(e.target === Nodes.findBoxText) return;
 			if(AnalyseDialog && (AnalyseDialog.content.style.display !== "none")) return;
 			if(OptionsDialog && OptionsDialog.isDisplay()) return;
 
-			// keyCode はWeb標準で非推奨になったので key で通常キー、getModifierState() で修飾キーを判定します。
-			// key が1文字の場合は文字キーと仮定して小文字に正規化します。
 			if(keyValue.length === 1){
 				keyValue = keyValue.toLowerCase();
 			}
-			// 修飾キーを付加
 			['Alt', 'Control', 'Shift'].forEach((modkey) => { if(e.getModifierState(modkey)) keyValue = modkey + "+" + keyValue; });
 			this.log.dbg("key=" + keyValue);
 
-			// 数字キー入力による指定レス番号へのスクロール
 			if(/^\d$/.test(keyValue)){
 				e.preventDefault();
 				this._numStr += keyValue;
@@ -2789,7 +2578,6 @@ var KeyInput = {
 				this._numStr = "";
 			}
 
-			// ショートカットキーに割り当てられた機能を実行
 			if(!this.keymap[keyValue]) return;
 			switch(this.keymap[keyValue]){
 			case 'UpdateThread':
@@ -2862,39 +2650,42 @@ var KeyInput = {
 			}
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var KeyInput = new KeyInputManager();
+
 
 /**
- * [検索/抽出] 機能を管理します。
- * @namespace
+ * [検索/抽出] 機能を管理するクラス
  */
-var FindBox = {
-	log: new SkinLog("FindBox", SkinLogLvl.WARNING),
-	/**
-	 * 既に初期化済みかどうか
-	 * @type {boolean}
-	 */
-	inited: false,
-	/**
-	 * 検索/抽出実行前のスクロール位置
-	 * @type {number}
-	 */
-	scrollY: -1,
-	/**
-	 * 強調表示か
-	 * @type {boolean}
-	 */
-	is_strong: false,
+class FindBoxManager {
+	constructor() {
+		this.log = new SkinLog("FindBox", SkinLogLvl.WARNING);
+		/**
+		 * 既に初期化済みかどうか
+		 * @type {boolean}
+		 */
+		this.inited = false;
+		/**
+		 * 検索/抽出実行前のスクロール位置
+		 * @type {number}
+		 */
+		this.scrollY = -1;
+		/**
+		 * 強調表示か
+		 * @type {boolean}
+		 */
+		this.is_strong = false;
+	}
 	/**
 	 * 検索/抽出ボックスが表示されているかどうか
 	 * @type {boolean}
 	 */
 	get isVisible(){
 		return (Nodes.findBox.style.display === "block");
-	},
+	}
 	/**
 	 * 検索/抽出ボックスを表示します。
-	 * @param {event}	e	イベント
 	 */
 	show(){
 		this.log.info("show()");
@@ -2914,10 +2705,9 @@ var FindBox = {
 			window.addEventListener("keypress",  this, false);
 			Nodes.findBoxText.addEventListener("change", this, false);
 		}
-	},
+	}
 	/**
 	 * イベントを処理します。
-	 * @param {event}	e	イベント
 	 */
 	handleEvent(e){
 		const regexp = /(find|findbox|findboxClear|findboxText|findObject|findContent|findShow|findStrong)/;
@@ -2949,18 +2739,16 @@ var FindBox = {
 			break;
 		case "change":
 		}
-	},
+	}
 	/**
 	 * 検索/抽出ボックスを非表示します。
-	 * @param {event}	e	イベント
 	 */
 	hide(){
 		Nodes.findBox.style.display = "none";
 		Nodes.content.removeAttribute("find");
-	},
+	}
 	/**
 	 * 検索/抽出ボックスをクリアします。
-	 * @param {event}	e	イベント
 	 */
 	clear(){
 		Nodes.findBoxText.value = "";
@@ -2972,18 +2760,15 @@ var FindBox = {
 		});
 		if(this.scrollY !== -1) window.scrollTo(0, this.scrollY);
 		this.scrollY = -1;
-	},
+	}
 	/**
 	 * 正規表現に使用される文字列をエスケープします。
-	 * @param　{string}	str		文字列
-	 * @return　{string}	エスケープされた文字列
 	 */
 	escapeExpression(str){
 		return str.replace(/([.*+?^${}()|[\]\/\\])/g, "\\$1");
-	},
+	}
 	/**
 	 * 指定された文字列を強調表示します。
-	 * @param {string}	str		文字列
 	 */
 	highlight(str){
 		const x = window.scrollX;
@@ -2996,7 +2781,7 @@ var FindBox = {
 		window.getSelection().removeAllRanges();
 		window.scrollTo(x, y);
 		this.is_strong = true;
-	},
+	}
 	/**
 	 * 指定された文字列の強調表示を解除します。
 	 */
@@ -3015,11 +2800,9 @@ var FindBox = {
 			window.setTimeout(clearHighlight, 1, node);
 		}
 		this.is_strong = false;
-	},
+	}
 	/**
 	 * 検索/抽出を実行します。
-	 * @param {boolean}	[force]	IDピックアップ機能の場合に true
-	 * @param {number} 	[type]	IDピックアップ形式を指定
 	 */
 	find(force, type){
 		const scrollY = window.scrollY;
@@ -3045,7 +2828,7 @@ var FindBox = {
 			"body": ResNodes.getBodies.bind(ResNodes)
 		};
 
-		if(force){	// IDピックアップ機能
+		if(force){
 			Nodes.findObject.value = "resOrg";
 			Nodes.findContent.value = "in";
 			if(type) Nodes.findShow.value = (type === 1 ? "only" : "mark");
@@ -3110,55 +2893,59 @@ var FindBox = {
 			}
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var FindBox = new FindBoxManager();
+
 
 /**
- * [自動更新] 機能を管理します。
- * @namespace
+ * 自動更新機能を管理するクラス
  */
-var AutoReload = {
-	log: new SkinLog("AutoReload", SkinLogLvl.WARNING),
-	/**
-	 * 自動更新に使うタイマー ID
-	 * @type {number}
-	 */
-	timerID: 0,
-	/**
-	 * 開いているスレッドがアクティヴ状態かどうか
-	 * @type {boolean}
-	 */
-	isActive: true,
-	/**
-	 * 実際に更新を要求するかどうか
-	 * @type {boolean}
-	 */
-	requestReload: false,
-	/**
-	 * このスレッドが閉じられようとしているかどうか
-	 * @type {boolean}
-	 */
-	isUnloading: false,
-	/**
-	 * インターバルの配列
-	 * @type {Array<number>}
-	 */
-	INTERVAL: [15000, 30000, 60000, 180000, 300000, 600000],
-	/**
-	 * レス無しのカウンタ
-	 * @type {number}
-	 */
-	noResCount: 0,
-	/**
-	 * さぼりレベル
-	 * @type {number}
-	 */
-	saborinLv: 1,
-	/**
-	 * インターバル時間 (msec)
-	 * @type {number}
-	 */
-	intervalMSec: 0,
-	isBackground: false,
+class AutoReloadManager {
+	constructor() {
+		this.log = new SkinLog("AutoReload", SkinLogLvl.WARNING);
+		/**
+		 * 自動更新に使うタイマー ID
+		 * @type {number}
+		 */
+		this.timerID = 0;
+		/**
+		 * 開いているスレッドがアクティヴ状態かどうか
+		 * @type {boolean}
+		 */
+		this.isActive = true;
+		/**
+		 * 実際に更新を要求するかどうか
+		 * @type {boolean}
+		 */
+		this.requestReload = false;
+		/**
+		 * このスレッドが閉じられようとしているかどうか
+		 * @type {boolean}
+		 */
+		this.isUnloading = false;
+		/**
+		 * インターバルの配列
+		 * @type {Array<number>}
+		 */
+		this.INTERVAL = [15000, 30000, 60000, 180000, 300000, 600000];
+		/**
+		 * レス無しのカウンタ
+		 * @type {number}
+		 */
+		this.noResCount = 0;
+		/**
+		 * さぼりレベル
+		 * @type {number}
+		 */
+		this.saborinLv = 1;
+		/**
+		 * インターバル時間 (msec)
+		 * @type {number}
+		 */
+		this.intervalMSec = 0;
+		this.isBackground = false;
+	}
 	/**
 	 * 各種イベントリスナを登録し、初期化を行います。
 	 */
@@ -3197,7 +2984,7 @@ var AutoReload = {
 				window.addEventListener("blur",  () => { if(this.enabled) this.isBackground = true;  }, false);
 			}
 		}
-	},
+	}
 	/**
 	 * 自動更新（固定インターバル）処理を行います。
 	 */
@@ -3211,7 +2998,7 @@ var AutoReload = {
 		}else{
 			this.requestReload = true;
 		}
-	},
+	}
 	/**
 	 * おまかせ更新（可変インターバル）処理を行います。
 	 */
@@ -3222,15 +3009,18 @@ var AutoReload = {
 		const pace = Analyse.toStringfromTimeDiff(timePerRes);
 
 		let reloadSecond = 60 * 60;
-		if(pace.match(/^(\d+)分/)){
-			reloadSecond = parseInt(RegExp.$1) * 60;
-		}else if(pace.match(/^(\d+)([.]\d+)?秒/)){
-			reloadSecond = parseInt(RegExp.$1);
+		const matchMin = pace.match(/^(\d+)分/);
+		const matchSec = pace.match(/^(\d+)([.]\d+)?秒/);
+		if(matchMin){
+			reloadSecond = parseInt(matchMin[1], 10) * 60;
+		}else if(matchSec){
+			reloadSecond = parseInt(matchSec[1], 10);
 		}else{
-			reloadSecond = this.INTERVAL[SkinPref.get("valueAutoReloadInterval")];
+			const idx = SkinPref.get("valueAutoReloadInterval");
+			reloadSecond = this.INTERVAL[(idx < 0 || 5 < idx) ? 1 : idx] / 1000;
 		}
 
-		//無レスが続くと仕事をさぼり始める。
+		//無レスが続くと仕事を手を抜き始める。
 		if(ThreadDocument.countUnread === 0){
 			this.noResCount = this.noResCount + 1;
 			if(this.noResCount === 3){
@@ -3246,29 +3036,27 @@ var AutoReload = {
 
 		this.timerID = window.setTimeout(this.timerProcAuto.bind(this), this.intervalMSec);
 		this.showIntervalText(1);
-	},
+	}
 	/**
 	 * 自動更新の有効/無効をトグルで切り替えます。
 	 */
 	toggle(){
 		this.enabled = !this.enabled;
-	},
+	}
 	/**
 	 * インターバル時間を設定します。
-	 * @param {number} sec	インターバル時間(秒)
 	 */
 	setInterval(sec){
-		let reloadSec = ((sec < 15) ? 15 : sec) * this.saborinLv;	//最小は15秒
+		let reloadSec = ((sec < 15) ? 15 : sec) * this.saborinLv;
 		if(reloadSec > 3600){
-			reloadSec = 3600;	//最大は1時間(3600秒)
+			reloadSec = 3600;
 		}else if(reloadSec >= 60){
 			reloadSec = Math.round(reloadSec / 60) * 60;
 		}
 		this.intervalMSec = reloadSec * 1000;
-	},
+	}
 	/**
 	 * インターバル時間を表示します。
-	 * @param {number} type	1:おまかせ、0:自動
 	 */
 	showIntervalText(type){
 		const MINUTE = 60000;
@@ -3278,14 +3066,14 @@ var AutoReload = {
 			(this.intervalMSec / SECOND) + "秒";
 		Nodes.reloadInfo.textContent = "【" + ((type === 1) ? "おまかせ" : "自動") + "更新中】 → " + text + "間隔...";
 		Nodes.reloadInfo.style.visibility = "visible";
-	},
+	}
 	/**
 	 * 自動更新の有効/無効
 	 * @type {boolean}
 	 */
 	get enabled(){
 		return (this.timerID !== 0);
-	},
+	}
 	set enabled(value){
 		if(this.timerID){
 			Nodes.reloadInfo.style.visibility = "hidden";
@@ -3300,7 +3088,8 @@ var AutoReload = {
 			if(SkinPref.get("enableChangeInterval")){
 				this.timerProcAuto();
 			}else{
-				const msec = this.INTERVAL[SkinPref.get("valueAutoReloadInterval")];
+				const idx = SkinPref.get("valueAutoReloadInterval");
+				const msec = this.INTERVAL[(idx < 0 || 5 < idx) ? 1 : idx];
 				this.timerID = window.setInterval(this.timerProc.bind(this), msec);
 				this.setInterval(msec / 1000);
 				this.showIntervalText(0);
@@ -3308,31 +3097,35 @@ var AutoReload = {
 		}
 		ThreadDocument.setFavicon("");
 	}
-};
+}
+// グローバル変数名へのマッピング
+var AutoReload = new AutoReloadManager();
+
 
 /**
- * [要約] 機能を管理します。
- * @namespace
+ * 要約機能を管理するクラス
  */
-var Digest = {
-	/**
-	 * 要約が有効か
-	 * @type {boolean}
-	 */
-	_enabled: false,
+class DigestManager {
+	constructor() {
+		/**
+		 * 要約が有効か
+		 * @type {boolean}
+		 */
+		this._enabled = false;
+	}
 	/**
 	 * 要約の有効/無効をトグルで切り替えます。
 	 */
 	toggle(){
 		this.enabled = !this.enabled;
-	},
+	}
 	/**
 	 * 要約機能の有効/無効
 	 * @type {boolean}
 	 */
 	get enabled(){
 		return this._enabled;
-	},
+	}
 	set enabled(value){
 		this._enabled = value;
 		const expSingleAnchor = new RegExp(/(>?>|\uFF1E)([0-9\uFF10-\uFF19]{1,4})/);
@@ -3350,31 +3143,35 @@ var Digest = {
 			ResNodes.getBodies().forEach((body) => TD.resShow(body.parentNode));
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Digest = new DigestManager();
+
 
 /**
- * [人気レス] 機能を管理します。
- * @namespace
+ * 人気レス機能を管理するクラス
  */
-var Popular = {
-	/**
-	 * 人気レス抽出表示が有効か
-	 * @type {boolean}
-	 */
-	_enabled: false,
+class PopularManager {
+	constructor() {
+		/**
+		 * 人気レス抽出表示が有効か
+		 * @type {boolean}
+		 */
+		this._enabled = false;
+	}
 	/**
 	 * 人気レス抽出表示の有効/無効をトグルで切り替えます。
 	 */
 	toggle(){
 		this.enabled = !this.enabled;
-	},
+	}
 	/**
 	 * 人気レス抽出表示の有効/無効
 	 * @type {boolean}
 	 */
 	get enabled(){
 		return this._enabled;
-	},
+	}
 	set enabled(value){
 		this._enabled = value;
 		const thrs = SkinPref.get("valuePopularPostThreshold");
@@ -3391,24 +3188,28 @@ var Popular = {
 			ResNodes.getContainers().forEach((node) => TD.resShow(node));
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Popular = new PopularManager();
+
 
 /**
- * しおり機能を管理します。
- * @namespace
+ * しおり機能を管理するクラス
  */
-var Bookmark = {
-	log: new SkinLog("Bookmark", SkinLogLvl.WARNING),
-	/**
-	 * しおりが挿んであるレス番号
-	 * @type {number}
-	 */
-	index: 0,
-	/**
-	 * しおり要素の幅
-	 * @type {number}
-	 */
-	width: 0,
+class BookmarkManager {
+	constructor() {
+		this.log = new SkinLog("Bookmark", SkinLogLvl.WARNING);
+		/**
+		 * しおりが挿んであるレス番号
+		 * @type {number}
+		 */
+		this.index = 0;
+		/**
+		 * しおり要素の幅
+		 * @type {number}
+		 */
+		this.width = 0;
+	}
 	/**
 	 * イベントリスナを登録し、しおりが挿んであるレスが非表示であれば表示させます。
 	 * @return {number}		しおりが挿んであるレス番号
@@ -3455,7 +3256,7 @@ var Bookmark = {
 			}
 		}
 		return this.index;
-	},
+	}
 	/**
 	 * イベントを処理します。
 	 * @param {event}	e	イベント
@@ -3497,11 +3298,9 @@ var Bookmark = {
 				}
 			}
 		}
-	},
+	}
 	/**
 	 * しおりを読み込みます。
-	 * @param  {string}	url		スレッドのURL
-	 * @return {number}	レス番号
 	 */
 	load(url){
 		const bmkTbl = Storage.get("valueBookmarkIndex");
@@ -3510,11 +3309,9 @@ var Bookmark = {
 		const resNum = (bmkTbl[url] || 0);
 		this.log.dbg("load(" + url + ") = " + resNum);
 		return resNum;
-	},
+	}
 	/**
 	 * しおりを保存します。
-	 * @param {string}	url		スレッドのURL
-	 * @param {number}	resNum	レス番号
 	 */
 	save(url, resNum){
 		this.log.dbg("save(" + url + "," + resNum + ")");
@@ -3523,17 +3320,14 @@ var Bookmark = {
 
 		bmkTbl[url] = this.index = resNum;
 		Storage.set("valueBookmarkIndex", bmkTbl);
-	},
+	}
 	/**
 	 * しおりを挿入します。
-	 * @param {number}	resNum		挿入するレス番号
-	 * @param {boolean}	noAnimation	アニメーションを無効にするかどうか
 	 */
 	insert(resNum, noAnimation){
 		const node = Nodes.getRes(resNum);
 		if(node){
-			let div = null;
-			div = _doc.getElementById("bookmark");
+			let div = _doc.getElementById("bookmark");
 			if(div) div.parentNode.removeChild(div);
 			div = _doc.createElement("div");
 			div.id = "bookmark";
@@ -3547,10 +3341,9 @@ var Bookmark = {
 			this.width = div.clientWidth;
 			if(!noAnimation) this.show();
 		}
-	},
+	}
 	/**
 	 * しおりを実際に表示します。
-	 * @param {number}	step	しおりの加速度
 	 */
 	show(step){
 		if(!step) step = 1;
@@ -3563,10 +3356,9 @@ var Bookmark = {
 				div.style.width = this.width + "px";
 			}
 		}
-	},
+	}
 	/**
 	 * しおりを非表示します。
-	 * @param {number}	step	しおりの加速度
 	 */
 	hide(step){
 		if(!step) step = 1;
@@ -3585,10 +3377,9 @@ var Bookmark = {
 				div.parentNode.removeChild(div);
 			}
 		}
-	},
+	}
 	/**
 	 * しおりのレスまでスクロールします。
-	 * @param {Element}	[node]	レス要素
 	 */
 	jumpTo(node){
 		const fn = "jumpTo(node)";
@@ -3601,26 +3392,28 @@ var Bookmark = {
 			}
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Bookmark = new BookmarkManager();
+
 
 /**
- * オートスクロール機能を管理します。
- * @namespace
+ * オートスクロール機能を管理するクラス
  */
-var AutoScroll = {
-	log: new SkinLog("AutoScroll", SkinLogLvl.WARNING),
-
-	timerID: null,
+class AutoScrollManager {
+	constructor() {
+		this.log = new SkinLog("AutoScroll", SkinLogLvl.WARNING);
+		this.timerID = null;
+	}
 	/**
 	 * イベントを処理します。
 	 */
 	handleEvent(e){
 		if(e.type !== "mousedown") return;
 		if(e.target.id !== "autoScroll") this.stop();
-	},
+	}
 	/**
 	 * オートスクロールを停止する。
-	 * @param {boolean}	force	強制停止
 	 */
 	stop(force){
 		this.log.info("stop(" + force + ")");
@@ -3630,7 +3423,7 @@ var AutoScroll = {
 			this.timerID = null;
 			_doc.getElementById("autoScroll").className = "scrolloff";
 		}
-	},
+	}
 	/**
 	 * オートスクロールを開始します。
 	 */
@@ -3645,59 +3438,62 @@ var AutoScroll = {
 				this.stop();
 			}
 		}, 2000);
-	},
+	}
 	/**
 	 * オートスクロールの動作を切り替えます。
 	 */
 	toggle(){
 		if(this.timerID) this.stop(true); else this.start();
 	}
-};
+}
+// グローバル変数名へのマッピング
+var AutoScroll = new AutoScrollManager();
+
 
 /**
- * 左右カーソルキーによるスムーズスクロール機能を管理します。
- * @namespace
+ * 左右カーソルキーによるスムーズスクロール機能を管理するクラス
  */
-var PageScroller = {
-	log: new SkinLog("PageScroller", SkinLogLvl.WARNING),
-	/**
-	 * スクロール位置
-	 * @type {number}
-	 */
-	y: null,
-	/**
-	 * 現在のスクロール対象のレス番号
-	 * @type {number}
-	 */
-	index: null,
-	/**
-	 * 速度
-	 * @type {number}
-	 */
-	currentVelocity: 0,
-	/**
-	 * 初速
-	 * @type {number}
-	 */
-	initialVelocity: 0,
-	/**
-	 * ジェネレータ・イテレータ
-	 * @type {iterator}
-	 */
-	gen: null,
-	/**
-	 * まだスクロール中かどうか
-	 * @type {boolean}
-	 */
-	isBusy: false,
-	/**
-	 * ジェネレータの実行をリスタートすべきかどうか
-	 * @type ｂoolean
-	 */
-	shouldRestart: false,
+class PageScrollerManager {
+	constructor() {
+		this.log = new SkinLog("PageScroller", SkinLogLvl.WARNING);
+		/**
+		 * スクロール位置
+		 * @type {number}
+		 */
+		this.y = null;
+		/**
+		 * 現在のスクロール対象のレス番号
+		 * @type {number}
+		 */
+		this.index = null;
+		/**
+		 * 速度
+		 * @type {number}
+		 */
+		this.currentVelocity = 0;
+		/**
+		 * 初速
+		 * @type {number}
+		 */
+		this.initialVelocity = 0;
+		/**
+		 * ジェネレータ・イテレータ
+		 * @type {iterator}
+		 */
+		this.gen = null;
+		/**
+		 * まだスクロール中かどうか
+		 * @type {boolean}
+		 */
+		this.isBusy = false;
+		/**
+		 * ジェネレータの実行をリスタートすべきかどうか
+		 * @type {boolean}
+		 */
+		this.shouldRestart = false;
+	}
 	/**
 	 * 先頭/最後のレスへスクロールします。
-	 * @param {string} to	"top" / "ｅｎｄ"
 	 */
 	scrollTopEnd(to){
 		this.log.info("scrollTopEnd(" + to + ")");
@@ -3712,7 +3508,7 @@ var PageScroller = {
 			this.y = dest.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
 			this.requestScroll();
 		}
-	},
+	}
 	/**
 	 * 前のレスへスクロールします。
 	 */
@@ -3737,7 +3533,6 @@ var PageScroller = {
 				if(TD.isShow(resTop) && (resTop.offsetTop < top)){
 					if(resTop){
 						this.index = i;
-						//this.lastDirection = "prev";
 						this.y = resTop.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
 						this.requestScroll();
 					}
@@ -3745,7 +3540,7 @@ var PageScroller = {
 				}
 			}
 		}
-	},
+	}
 	/**
 	 * 次のレスへスクロールします。
 	 */
@@ -3772,7 +3567,6 @@ var PageScroller = {
 					resTop = resItems[i];
 					if(resTop){
 						this.index = i;
-						//this.lastDirection = "next";
 						this.y = resTop.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
 						this.requestScroll();
 					}
@@ -3785,7 +3579,7 @@ var PageScroller = {
 				this.requestScroll();
 			}
 		}
-	},
+	}
 	/**
 	 * スクロールを要求します。
 	 */
@@ -3800,7 +3594,7 @@ var PageScroller = {
 		}else{
 			this.scroll();
 		}
-	},
+	}
 	/**
 	 * スクロール処理を実行・管理します。
 	 */
@@ -3820,25 +3614,23 @@ var PageScroller = {
 				this.isBusy = false;
 			}
 		}, 0, this.y);
-	},
+	}
 	/**
 	 * 実際のスクロール処理を行います。これは yield を使ったジェネレータ（コルーチン）です。
-	 * ※ES6仕様の yield とジェネレータ構文使用のため、scriptタグで version=1.8 の指定が必要（1.7だと不可）です。
-	 * 設定したフレーム数の半分（steps_half）で速度を上げ、後の半分で速度を下げてスクロールします。
-	 * 各ステップごとに一時停止されて処理を戻します。
 	 */
 	*execScroll(){
 		const y1 = window.pageYOffset;
-		let   y2 = parseInt(this.y);
+		let   y2 = parseInt(this.y, 10);
+		if(isNaN(y2)) y2 = 0;
 		if(y2 < 0) y2 = 0;
 		if((y2 + window.innerHeight) > _doc.body.offsetHeight) y2 = _doc.body.offsetHeight - window.innerHeight;
 		const delta = y2 - y1;
 		let steps_half;
 		switch (SkinPref.get("valueSmoothScrollFrames")){
-			case 0: steps_half = 8  /*16*/; break;
-			case 1: steps_half = 12 /*24*/; break;
-			case 2: steps_half = 16 /*32*/; break;
-			default: steps_half = 12 /*24*/;
+			case 0: steps_half = 8; break;
+			case 1: steps_half = 12; break;
+			case 2: steps_half = 16; break;
+			default: steps_half = 12;
 		}
 		this.initialVelocity = this.currentVelocity;
 		const a1 = (((delta / 2) - this.initialVelocity) * 2) / (steps_half * steps_half);
@@ -3863,29 +3655,42 @@ var PageScroller = {
 		this.initialVelocity = 0;
 		this.currentVelocity = 0;
 	}
-};
+}
+// グローバル変数名へのマッピング
+var PageScroller = new PageScrollerManager();
+
 
 /**
- * 複数レスの選択を管理します。
- * @namespace
+ * 複数レスの選択を管理するクラス
  */
-var MultipleResSelector = {
-	log: new SkinLog("MultipleResSelector", SkinLogLvl.WARNING),
-	/**
-	 * マウスボタンが押されているかどうか
-	 * @type {boolean}
-	 */
-	isButtonDown: false,
-	/**
-	 * 選択が開始された要素
-	 * @type {Element}
-	 */
-	nodeFrom: null,
-	/**
-	 * 選択モード (true: 選択, false: 非選択)
-	 * @type {boolean}
-	 */
-	modeSelect: false,
+class MultipleResSelectorManager {
+	constructor() {
+		this.log = new SkinLog("MultipleResSelector", SkinLogLvl.WARNING);
+		/**
+		 * マウスボタンが押されているかどうか
+		 * @type {boolean}
+		 */
+		this.isButtonDown = false;
+		/**
+		 * 選択が開始された要素
+		 * @type {Element}
+		 */
+		this.nodeFrom = null;
+		/**
+		 * 選択モード (true: 選択, false: 非選択)
+		 * @type {boolean}
+		 */
+		this.modeSelect = false;
+		/**
+		 * ContextMenu オブジェクト
+		 * @type {ContextMenu}
+		 */
+		this.customMenu = null;
+		/**
+		 * メニューを開いているか。
+		 */
+		this.is_open = false;
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
@@ -3897,14 +3702,11 @@ var MultipleResSelector = {
 			Nodes.content.addEventListener("mouseover",   this, true);
 			Nodes.content.addEventListener("contextmenu", this, true);
 		}
-	},
+	}
 	/**
-	 * 選択されたレスのリストを、カンマ区切りの文字列を取得します。
-	 * @return {string}文字列
+	 * 選択されたレスのリストを取得します。
 	 */
 	getAnchorString(){
-		const fn = "getAnchorString()";
-		this.log.info(fn);
 		const items = ResNodes.getContainers(Nodes.content, true);
 		if(!items.length) return "";
 
@@ -3930,10 +3732,9 @@ var MultipleResSelector = {
 		else      indexes.push(prevIndex);
 
 		return indexes.join(",");
-	},
+	}
 	/**
 	 * 要素の表示を強制します。
-	 * @param {Element}	node	要素
 	 */
 	ensureVisible(node){
 		this.log.info("ensureVisible(node)");
@@ -3942,27 +3743,22 @@ var MultipleResSelector = {
 		}else if((node.offsetTop + node.offsetHeight) > (window.scrollY + window.innerHeight)){
 			window.scrollTo(0, node.offsetTop - window.innerHeight + node.offsetHeight);
 		}
-	},
+	}
 	/**
 	 * レスの選択状態を解除します。
 	 */
 	clear(){
 		this.log.info("clear()");
 		ResNodes.getContainers(Nodes.content, true).forEach((node) => node.classList.remove("resSelected"));
-	},
+	}
 	/**
 	 * イベントから、マウスの座標が有効範囲内にあるかどうかを取得します。
-	 * @return {boolean}	有効範囲内であれば true
 	 */
 	isEventInRange(e){
-		const fn = "isEventInRange(e)";
-		this.log.info(fn);
-		this.log.dbg("className=" + e.target.className + ", clientX=" + e.clientX);
 		return ((e.target.classList.contains("resContainer")) && (e.clientX <= 75)) ? true : false;
-	},
+	}
 	/**
 	 * レス要素を選択します。
-	 * @param {Element} node	レス要素
 	 */
 	selectNodes(nodeTo){
 		this.log.info("selectNodes(nodeTo)");
@@ -3977,10 +3773,9 @@ var MultipleResSelector = {
 
 			if(firstItem !== node && (node === this.nodeFrom || node === nodeTo)) break;
 		}
-	},
+	}
 	/**
 	 * イベントを処理します。
-	 * @param {event}	e	イベント
 	 */
 	handleEvent(e){
 		const node = e.target;
@@ -3996,7 +3791,6 @@ var MultipleResSelector = {
 				if(isLeftClick) this.clear();
 				break;
 			}
-			//----
 			if(!isClickOnly && !(e.ctrlKey || e.shiftKey) && !node.classList.contains("resSelected")){
 				this.clear();
 			}
@@ -4010,29 +3804,14 @@ var MultipleResSelector = {
 		case "contextmenu":
 			this.onContextMenu(e);
 		}
-	},
-	//
-	// コンテキストメニューの項目は ResNumberContextMenu と同じメニューを使用します。
-	//
-	/**
-	 * ContextMenu オブジェクト
-	 * @type {ContextMenu}
-	 */
-	customMenu: null,
-	/**
-	 * メニューを開いているか。
-	 */
-	is_open: false,
+	}
 	/**
 	 * contextmenu イベントを処理します。
-	 * @param {event}	e	イベント
 	 */
 	onContextMenu(e){
 		if(this.isEventInRange(e)){
 			this.customMenu = new ContextMenu(ResNumberContextMenu.items);
 			this.customMenu.onClick = (caption, menuid) => {
-				const fn = "onMenuItemClick(" + caption + "," + menuid + ")";
-				this.log.info(fn);
 				const numlistStr = this.getAnchorString();
 				if(numlistStr === ""){
 					this.log.warn("no selectors");
@@ -4075,47 +3854,48 @@ var MultipleResSelector = {
 			e.stopPropagation();
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var MultipleResSelector = new MultipleResSelectorManager();
+
 
 /**
- * Firefox の検索でヘッダが隠れる問題に対する対処を行います。
- * @namespace
+ * Firefox の検索でヘッダが隠れる問題に対する対処を行うクラス
  */
-var FxFindHandler = {
-	log: new SkinLog("FxFindHandler", SkinLogLvl.WARNING),
-	/**
-	 * ドラッグ中かどうか
-	 * @type {boolean}
-	 */
-	isDragging: false,
-	/**
-	 * Shift キーが押されているかどうか
-	 * @type {boolean}
-	 */
-	isShiftKeyPressed: false,
-	/**
-	 * 前回の選択範囲
-	 * @type {Object}
-	 */
-	prevRange: null,
+class FxFindHandlerManager {
+	constructor() {
+		this.log = new SkinLog("FxFindHandler", SkinLogLvl.WARNING);
+		/**
+		 * ドラッグ中かどうか
+		 * @type {boolean}
+		 */
+		this.isDragging = false;
+		/**
+		 * Shift キーが押されているかどうか
+		 * @type {boolean}
+		 */
+		this.isShiftKeyPressed = false;
+		/**
+		 * 前回の選択範囲
+		 * @type {Object}
+		 */
+		this.prevRange = null;
+	}
 	/**
 	 * 要素の位置とサイズを取得します。
-	 * @param {Element}		src	要素
-	 * @return {Object}		left, top, width, height, right, bottom の各メンバから成るオブジェクト
 	 */
 	getRect(src){
 		return ContextMenu.getRect(src);
-	},
+	}
 	/**
 	 * 要素の表示を強制します。
-	 * @param {Element}	node	要素
 	 */
 	ensureVisible(node){
 		const rc = this.getRect(node);
 		if(rc.top < (window.scrollY + Nodes.header.offsetTop + Nodes.header.offsetHeight)){
 			window.scrollTo(0, rc.top - (Nodes.header.offsetTop + Nodes.header.offsetHeight));
 		}
-	},
+	}
 	/**
 	 * 選択範囲を保存します。
 	 */
@@ -4125,7 +3905,7 @@ var FxFindHandler = {
 		const range = selection.getRangeAt(0);
 		if(range.collapsed) return;
 		this.prevRange = range;
-	},
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
@@ -4150,31 +3930,34 @@ var FxFindHandler = {
 				const range = selection.getRangeAt(0);
 				if(range.collapsed) return;
 				if(range === this.prevRange) return;
-				// text nodes have no positions
 				const node = (range.startContainer.nodeType === 3) ? range.startContainer.parentNode : range.startContainer;
 				this.ensureVisible(node);
 				this.prevRange = range;
 			}, 10);
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var FxFindHandler = new FxFindHandlerManager();
+
 
 /**
- * 不用意なポップアップを禁止する機能を管理します。
- * @namespace
+ * 不用意なポップアップを禁止するクラス
  */
-var PopupPreventer = {
-	log: new SkinLog("PopupPreventer", SkinLogLvl.WARNING),
-	/**
-	 * スクロールされたかどうか
-	 * @type {boolean}
-	 */
-	isScrolled: false,
-	/**
-	 * 最後にスクロールされたときに時間
-	 * @type {number}
-	 */
-	lastScrolledTime: null,
+class PopupPreventerManager {
+	constructor() {
+		this.log = new SkinLog("PopupPreventer", SkinLogLvl.WARNING);
+		/**
+		 * スクロールされたかどうか
+		 * @type {boolean}
+		 */
+		this.isScrolled = false;
+		/**
+		 * 最後にスクロールされたとき時間
+		 * @type {number}
+		 */
+		this.lastScrolledTime = null;
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
@@ -4202,14 +3985,18 @@ var PopupPreventer = {
 			}, true);
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var PopupPreventer = new PopupPreventerManager();
+
 
 /**
- * タイトルバーを管理します。
- * @namespace
+ * タイトルバーを管理するクラス
  */
-var Titlebar = {
-	log: new SkinLog("Titlebar", SkinLogLvl.WARNING),
+class TitlebarManager {
+	constructor() {
+		this.log = new SkinLog("Titlebar", SkinLogLvl.WARNING);
+	}
 	/**
 	 * 初期設定を行います。
 	 */
@@ -4222,36 +4009,45 @@ var Titlebar = {
 				_doc.getElementById("showBar").style.visibility = "visible";
 			};
 		}else if(hide === 2){
-			Nodes.header.style.opacity = 0;
-			Nodes.header.onmouseover = () => { Nodes.header.style.opacity = 1; };
+			Nodes.header.style.opacity = "0";
+			Nodes.header.onmouseover = () => { Nodes.header.style.opacity = "1"; };
 			Nodes.header.onmouseout = () => {
 				if(!FindBox.isVisible && !ChevronContextMenu.is_open && !ThreadNameContextMenu.is_open){
-					Nodes.header.style.opacity = 0;
+					Nodes.header.style.opacity = "0";
 				}
 			};
 		}
-	},
+	}
 	/**
 	 * タイトルバーを戻します。
 	 */
 	showBar(){
-		Nodes.header.style.opacity = 1;
+		Nodes.header.style.opacity = "1";
 		Nodes.header.style.visibility = "visible";
 		_doc.getElementById("showBar").style.visibility = "hidden";
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Titlebar = new TitlebarManager();
+
 
 /**
- * 自分のレスにマークを付け、それにアンカーを付けたレスもマークして通知を行います。
- * @namespace
+ * 自分のレスにマークを付け、それにアンカーを付けたレスもマークして通知を行うクラス
  */
-var MyAndRep = {
-	log: new SkinLog("MyAndRep", SkinLogLvl.WARNING),
-	/**
-	 * スタイルシート
-	 * @type {StyleSheet}
-	 */
-	_style: null,
+class MyAndRepManager {
+	constructor() {
+		this.log = new SkinLog("MyAndRep", SkinLogLvl.WARNING);
+		/**
+		 * スタイルシート
+		 * @type {StyleSheet}
+		 */
+		this._style = null;
+		this.mycolor = "";
+		this.repcolor = "";
+		this.isMyPost = false;
+		this.isReply = false;
+		this.isNotify = false;
+	}
 	/**
 	 * プロパティを初期設定します。
 	 */
@@ -4260,34 +4056,31 @@ var MyAndRep = {
 		this.repcolor = SkinPref.get("stringReplyBgColor");
 		this.isMyPost = SkinPref.get("enableHighlightMyPost");
 		this.isReply = SkinPref.get("enableHighlightReply");
-		this.isNotify = SkinPref.get("enableNotifyReplay");
-	},
+		this.isNotify = SkinPref.get("enableNotifyReply"); // enableNotifyReplayのタイポ修正反映
+	}
 	/**
 	 * 処理を再度行って表示を更新します。
 	 */
 	update(){
 		this.init();
 		this.scanMyPostAndReply();
-	},
+	}
 	/**
 	 * 自分/返信レスの強調スタイルを作成
 	 */
 	createStyle(){
 		if(this._style) this._style.clear();
 		this._style = new StyleSheet('myandrepStyle');
-		// 自分レス（こちらが優先される）
 		this._style.insert('.my-post .resName::before	{ content: "自分: "; }');
 		this._style.insert('.highlighted.my-post .resHeader { background-color: ' + this.mycolor + '; }');
-		// 返信レス
 		this._style.insert('.reply-to-me .resName::before { content: "返信: "; }');
 		this._style.insert('.highlighted.reply-to-me .resHeader { background-color: ' + this.repcolor + '; }');
-	},
+	}
 	/**
 	 * 利用者に Web Notification の許可を問い合わせます。
 	 */
 	isPermitNotify(){
-		const fn = "isPermitNotify()";
-		this.log.info(fn);
+		this.log.info("isPermitNotify()");
 		if(!Notification || Notification.permission === 'denied'){
 			return false;
 		}else if(Notification.permission === 'granted'){
@@ -4298,12 +4091,9 @@ var MyAndRep = {
 					Notification.permission = status;
 				}
 			});
-			if(Notification.permission === 'granted'){
-				return true;
-			}
-			return false;
+			return (Notification.permission === 'granted');
 		}
-	},
+	}
 	/**
 	 * Web Notification を生成して通知を発行します。
 	 */
@@ -4312,15 +4102,12 @@ var MyAndRep = {
 		if(this.isPermitNotify()){
 			new Notification("lego-ex-R", { tag: "lego-ex-R", body: msg });
 		}
-	},
+	}
 	/**
 	 * 指定したレス番号を自分のレスとして登録/解除します。
-	 * @param {number} resNum	レス番号
 	 */
 	toggleMyPost(resNum){
 		if(SysPref.disableStorage) return;
-		const fn = "toggleMyPost(" + resNum + ")";
-		this.log.info(fn);
 		const dbMyPosts = Storage.get("valueMyPosts") || {};
 		const url = TD.threadUrl;
 		if(!dbMyPosts[url]) dbMyPosts[url] = [];
@@ -4334,15 +4121,12 @@ var MyAndRep = {
 
 		Storage.set("valueMyPosts", dbMyPosts);
 		this.scanMyPostAndReply();
-	},
+	}
 	/**
 	 * 指定したIDを自分のIDとして登録/解除します。
-	 * @param {string} id	ID文字列
 	 */
 	toggleMyID(id){
 		if(SysPref.disableStorage || !ID.isValidID(id)) return;
-		const fn = "toggleMyID(" + id + ")";
-		this.log.info(fn);
 		const dbMyIDs = Storage.get("valueMyIDs") || {};
 		const url = TD.boardUrl;
 		if(!dbMyIDs[url]) dbMyIDs[url] = [];
@@ -4356,14 +4140,12 @@ var MyAndRep = {
 
 		Storage.set("valueMyIDs", dbMyIDs);
 		this.scanMyPostAndReply();
-	},
+	}
 	/**
 	 * 表示中のスレッドの登録済みレス番号を全消去する
 	 */
 	clearMyPosts(){
 		if(SysPref.disableStorage) return;
-		const fn = "clearMyPosts()";
-		this.log.info(fn);
 		const dbMyPosts = Storage.get("valueMyPosts") || {};
 		if(!dbMyPosts[TD.threadUrl]){
 			alert("このスレッドで登録済みのレス番号はありません");
@@ -4372,14 +4154,12 @@ var MyAndRep = {
 			Storage.set("valueMyPosts", dbMyPosts);
 			this.scanMyPostAndReply();
 		}
-	},
+	}
 	/**
 	 * 表示中のスレッドの板の登録済みIDを全消去する
 	 */
 	clearMyIDs(){
 		if(SysPref.disableStorage) return;
-		const fn = "clearMyIDs()";
-		this.log.info(fn);
 		const dbMyIDs = Storage.get("valueMyIDs") || {};
 		if(!dbMyIDs[TD.boardUrl]){
 			alert("このスレッドで登録済みのIDはありません");
@@ -4388,21 +4168,18 @@ var MyAndRep = {
 			Storage.set("valueMyIDs", dbMyIDs);
 			this.scanMyPostAndReply();
 		}
-	},
+	}
 	/**
 	 * 自分レスと返信レスをチェック
 	 */
 	scanMyPostAndReply(){
 		if(SysPref.disableStorage) return;
-		const fn = "scanMyPostAndReply()";
-		this.log.info(fn);
 
 		const dbMyPosts = Storage.get("valueMyPosts") || {};
 		const dbMyIDs = Storage.get("valueMyIDs") || {};
 		const myPosts = dbMyPosts[TD.threadUrl] || [];
 		const myIDs = dbMyIDs[TD.boardUrl] || [];
 
-		// マークを全解除
 		Array.from(Nodes.content.querySelectorAll('.my-post, .reply-to-me')).forEach((container) => {
 			container.classList.remove('highlighted');
 			container.classList.remove('my-post');
@@ -4414,17 +4191,13 @@ var MyAndRep = {
 		ID.traverse();
 		Trackback.traverse();
 
-		// 自レス番号
 		let myPostList = [];
-		myIDs.forEach((id) => { myPostList = myPostList.concat(ID.items[id]); });
+		myIDs.forEach((id) => { myPostList = myPostList.concat(ID.items[id] || []); });
 		myPostList = myPostList.concat(myPosts);
 
-		// 該当レスについて処理
 		let repCount = 0;
 		const maptbl = {};
 		myPostList.forEach((resNum) => {
-			this.log.dbg("resNum=" + resNum);
-			// 重複や穴はとばす
 			if(!resNum)			return;
 			if(!maptbl[resNum]) maptbl[resNum] = true;
 			else				return;
@@ -4432,19 +4205,15 @@ var MyAndRep = {
 			const mypost = ResNodes.getContainerByResNum(resNum);
 			if(!mypost) return;
 
-			mypost.classList.add("my-post");		// 自分
-			this.log.dbg("mark my-post");
+			mypost.classList.add("my-post");
 			if(this.isMyPost) mypost.classList.add("highlighted");
 
 			const repList = Trackback.items[resNum];
-			if(repList) repList.forEach((resNum) => {
-				this.log.dbg("resNum=" + resNum);
-				// 返信レス
-				const reply = ResNodes.getContainerByResNum(resNum);
+			if(repList) repList.forEach((num) => {
+				const reply = ResNodes.getContainerByResNum(num);
 				if(!reply) return;
 
-				reply.classList.add('reply-to-me');	// 返信
-				this.log.dbg("mark reply-to-me");
+				reply.classList.add('reply-to-me');
 				if(this.isReply) reply.classList.add("highlighted");
 
 				if(reply.getAttribute("new")){
@@ -4453,17 +4222,17 @@ var MyAndRep = {
 			});
 		});
 
-		// 返信通知
 		if(this.isNotify && (repCount > 0)){
 			this.notify("あなたのレスにアンカーをつけた新着レスがあります" + "  ( " + repCount + " res )");
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var MyAndRep = new MyAndRepManager();
 
 //======================================
 // ポップアップ関連
 //======================================
-
 /**
  * ポップアップの要素を管理します。
  */
@@ -4475,9 +4244,6 @@ class PopupItem {
 	 * @param {boolean} [hideOnHover]	ポップアップ上でホバーしたときに非表示にするかどうか
 	 */
 	constructor(source, useFade, hideOnHover){
-		this.log = new SkinLog("Storage", SkinLogLvl.WARNING);
-		this.log.info("new(" + source + "," + useFade + "," + hideOnHover + ")");
-
 		const divPopupContainer        = _doc.createElement("div");
 		divPopupContainer.className    = "popupContainer";
 		const divShadowTopRight        = _doc.createElement("div");
@@ -4503,50 +4269,31 @@ class PopupItem {
 		divShadowTopRight.appendChild(divShadowBottomLeft);
 		divPopupContainer.appendChild(divShadowTopRight);
 
-		/**
-		 * ポップアップの親要素
-		 * @type {Element}
-		 */
 		this.container = divPopupContainer;
-		/**
-		 * ポップアップとして表示する要素の直近の親要素
-		 * @type {Element}
-		 */
 		this.content = divPopupBody;
-		/**
-		 * ポップアップとして表示する要素
-		 * @type {Element}
-		 */
 		this.source = source;
-		/**
-		 * フェードアウトを有効にするかどうか
-		 * @type {boolean}
-		 */
-		this.useFade = useFade;
-		/**
-		 * ポップアップ上でホバーしたときに非表示にするかどうか
-		 * @type {boolean}
-		 */
-		this.hideOnHover = hideOnHover;
+		this.useFade = !!useFade;
+		this.hideOnHover = !!hideOnHover;
 	}
 }
 
+
 /**
- * 複数のポップアップをまとめて管理します。
- * @namespace
+ * 複数のポップアップをまとめて管理するクラス
  */
-var Popup = {
-	log: new SkinLog("Popup", SkinLogLvl.WARNING),
-	/**
-	 * PopupItem を格納した配列
-	 * @type {Array<PopupItem>}
-	 */
-	items: [],
-	/**
-	 * すでに初期化されたかどうかを表すフラグ
-	 * @type {boolean}
-	 */
-	inited: false,
+class PopupManager {
+	constructor() {
+		/**
+		 * PopupItem を格納した配列
+		 * @type {Array<PopupItem>}
+		 */
+		this.items = [];
+		/**
+		 * すでに初期化されたかどうかを表すフラグ
+		 * @type {boolean}
+		 */
+		this.inited = false;
+	}
 	/**
 	 * 要素の位置とサイズを取得します。
 	 * @param  {Element}	src	要素
@@ -4564,7 +4311,7 @@ var Popup = {
 			right:	x + src.offsetWidth,
 			bottom:	y + src.offsetHeight
 		};
-	},
+	}
 	/**
 	 * 指定された座標が要素の領域内にあるかどうかを調べます。
 	 * @param  {number}  x			x 座標（スクリーン座標）
@@ -4575,54 +4322,37 @@ var Popup = {
 	isPtInElement(x, y, element){
 		const rc = this.getRect(element);
 		return (x >= rc.left) && (x < rc.right) && (y >= rc.top) && (y < rc.bottom);
-	},
+	}
 	/**
 	 * 要素がすでにポップアップとして存在しているかどうかを調べます。
 	 * @param  {Element} source 	要素
 	 * @return {boolean} 要素がすでに存在していれば true
 	 */
 	sourceExists(source){
-		for(let i = 0; i < this.items.length; i++){
-			if(this.items[i].source === source) return true;
-		}
-		return false;
-	},
+		return this.items.some(item => item.source === source);
+	}
 	/**
 	 * ポップアップのサイズに応じて、適切な位置に移動します。
 	 * @param  {Element} item	要素
 	 */
 	reposition(item){
-		const fn = "reposition(item)";
-		this.log.info(fn);
-
 		const POPUP_MAX_HEIGHT = 600;
 		const rectSource = this.getRect(item.source);
 		item.container.style.visibility = "hidden";
 		if(item.container.offsetHeight > POPUP_MAX_HEIGHT){
-			item.content.style.height = POPUP_MAX_HEIGHT;
+			item.content.style.height = POPUP_MAX_HEIGHT + "px";
 			item.content.style.overflow = "auto";
 		}
 		const popupHeight = item.container.offsetHeight;
 
-		this.log.dbg("rectSource.top=" + rectSource.top +
-					" rectSource.bottom=" + rectSource.bottom +
-					" popupHeight=" + popupHeight +
-					" window.scrollY=" + window.scrollY +
-					" window.innerHeight=" + window.innerHeight +
-					" Nodes.header.offsetHeight=" + Nodes.header.offsetHeight);
-
 		let top, oppositeY;
 		if(!SkinPref.get("enableDefaultUpperPopup")){
-			this.log.dbg("up popup");
-			// ポップアップの下端が画面からはみ出しているかチェック
 			top = rectSource.bottom;
 			if(top + popupHeight > window.scrollY + window.innerHeight){
 				oppositeY = (rectSource.top - popupHeight);
 				if(oppositeY >= window.scrollY + Nodes.header.offsetHeight) top = oppositeY;
 			}
 		}else{
-			this.log.dbg("down popup");
-			// ポップアップの上端が画面からはみ出しているかチェック
 			top = rectSource.top - popupHeight;
 			if(top < window.scrollY){
 				oppositeY = (rectSource.bottom + popupHeight);
@@ -4638,11 +4368,10 @@ var Popup = {
 				left = _doc.body.clientWidth - item.container.offsetWidth - window.scrollX;
 			}
 		}
-		this.log.dbg("left="  + left + " top=" + top);
-		item.container.style.left = left;
-		item.container.style.top  = top;
+		item.container.style.left = left + "px";
+		item.container.style.top  = top + "px";
 		item.container.style.visibility = "visible";
-	},
+	}
 	/**
 	 * イベントを処理します。
 	 * @param  {event}	e	イベント
@@ -4653,7 +4382,7 @@ var Popup = {
 		case "mousemove":
 			this.remove(e);
 		}
-	},
+	}
 	/**
 	 * 初期設定を行います。
 	 */
@@ -4663,7 +4392,7 @@ var Popup = {
 			window.addEventListener("mousemove", this, false);
 			this.inited = true;
 		}
-	},
+	}
 	/**
 	 * 終了処理を行います。
 	 */
@@ -4673,7 +4402,7 @@ var Popup = {
 			window.removeEventListener("mouseout",  this, false);
 			window.removeEventListener("mousemove", this, false);
 		}
-	},
+	}
 	/**
 	 * ポップアップとして要素を追加、表示します。
 	 * @param  {Element} content		表示する要素
@@ -4681,8 +4410,6 @@ var Popup = {
 	 * @param  {boolean} hideOnHover	ポップアップ上でホバーしたときに非表示にするかどうか
 	 */
 	add(content, source, hideOnHover){
-		const fn = "add(content,source," + hideOnHover + ")";
-		this.log.info(fn);
 		if(this.sourceExists(source)) return false;
 
 		const item = new PopupItem(source, SkinPref.get("enablePopupFade"), hideOnHover);
@@ -4692,21 +4419,19 @@ var Popup = {
 		this.reposition(item);
 		this.init();
 		return item;
-	},
+	}
 	/**
 	 * ポップアップを削除します。
 	 * @param  {event}	e	イベント
 	 */
 	remove(e){
-		const fn = "remove(e)";
-		this.log.info(fn);
 		if(ResNumberContextMenu.is_open) return;
 		const x = e.pageX;
 		const y = e.pageY;
 		for(let i = this.items.length - 1; i >= 0; i--){
 			if(this.isPtInElement(x, y, this.items[i].source))    return;
 			if(!this.items[i].hideOnHover) if(this.isPtInElement(x, y, this.items[i].container)) return;
-			if(x < 10) return; //右クリメニューに乗った時用。たぶん本文の要素は最小で50くらいまでだと思う。
+			if(x < 10) return;
 			if(this.items[i].useFade){
 				this.removeChildWithFade(this.items[i].container);
 			}else{
@@ -4715,13 +4440,11 @@ var Popup = {
 			this.items.pop();
 		}
 		this.finish();
-	},
+	}
 	/**
 	 * 最後のポップアップ要素を削除します。
 	 */
 	remove_last(){
-		const fn = "remove_last()";
-		this.log.info(fn);
 		const idx = this.items.length - 1;
 		if(idx < 0) return;
 
@@ -4733,18 +4456,15 @@ var Popup = {
 		}
 		this.items.pop();
 		this.finish();
-	},
+	}
 	/**
 	 * 指定された要素が載っているポップアップを探します。
 	 * @param  {Element}	content		要素
 	 * @return {PopupItem}	マッチした PopupItem
 	 */
 	findPopup(content){
-		for(let i = 0, n = this.items.length; i < n; i++){
-			if(this.items[i].content.firstChild === content) return this.items[i];
-		}
-		return null;
-	},
+		return this.items.find(item => item.content.firstChild === content) || null;
+	}
 	/**
 	 * ポップアップのフェードアウト処理を行います。removeChildWithFade() から呼ばれます。
 	 * @param  {string} id	要素の ID
@@ -4761,7 +4481,7 @@ var Popup = {
 				window.setTimeout(this.fadeOutProc.bind(this), 1, id);
 			}
 		}
-	},
+	}
 	/**
 	 * ポップアップをフェードアウトしながら削除します。
 	 * @param  {Element}	node	要素
@@ -4774,20 +4494,56 @@ var Popup = {
 		}
 		window.setTimeout(this.fadeOutProc.bind(this), 1, id);
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Popup = new PopupManager();
+
 
 /**
- * レスアンカーのポップアップを管理します。
- * @namespace
+ * すべての個別ポップアップマネージャの共通基底クラス
  */
-var ResPopup = {
-	log: new SkinLog("ResPopup", SkinLogLvl.WARNING),
+class PopupBase {
+	constructor(moduleName) {
+		this.log = new SkinLog(moduleName, SkinLogLvl.WARNING);
+	}
+
 	/**
-	 * イベントリスナを登録します。
+	 * 要素を複製し、不要な子要素（埋め込み画像・動画）を除去した安全なノードを返します。
+	 * @param  {Element} src	複製元のレス要素
+	 * @return {Element} 複製・クリーンアップされたレス要素
+	 */
+	getCloneNode(src){
+		const dest = src.cloneNode(true);
+		// ポップアップ中のインライン画像・動画を排除
+		Array.from(dest.querySelectorAll(".embedGroup, .embedLast, .embedInline"))
+			.forEach((elem) => { elem.parentNode.removeChild(elem); });
+		ResNodes.getOutLinks(dest).forEach((elem) => {
+			if(elem.hasAttribute("is_embed")) elem.removeAttribute("is_embed");
+		});
+		if(dest.id) dest.id = "";
+		dest.removeAttribute("name");
+		Array.from(dest.getElementsByTagName("*")).forEach((elem) => {
+			if(elem.id) elem.id = "";
+			if(elem.hasAttribute("name")) elem.removeAttribute("name");
+		});
+		TD.resShow(dest);
+		return dest;
+	}
+}
+
+/**
+ * レスアンカーのポップアップを管理するクラス
+ */
+class ResPopupManager extends PopupBase {
+	constructor() {
+		super("ResPopup");
+	}
+	/**
+	 * イベントリスナを登録します。（漏れていたメソッドを追加）
 	 */
 	startup(){
 		window.addEventListener("mouseover", this, false);
-	},
+	}
 	/**
 	 * ポップアップの最大レス数を取得します。
 	 * @type {number}
@@ -4796,38 +4552,12 @@ var ResPopup = {
 	get popup_limit(){
 		const idx = SkinPref.get("valuePopupResMax");
 		const limit = SelOpts.PopupResMax[(idx < 0 || 9 < idx) ? 3 : idx];
-		this.log.dbg("popup_limit = " + limit);
 		return limit;
-	},
-	/**
-	 * 要素を複製し、いくつかの子要素や属性を削除したものを返却します。
-	 * @param  {Element} src	要素
-	 * @return {Element} 複製された要素
-	 */
-	getCloneNode(src){
-		const fn = "getCloneNode()";
-		this.log.info(fn);
-		const dest = src.cloneNode(true);
-		// 埋め込み画像・動画はポップアップではいったん除去する仕様にした
-		Array.from(dest.querySelectorAll(".embedGroup, .embedLast, .embedInline"))
-			.forEach((elem) => { elem.parentNode.removeChild(elem); });
-		ResNodes.getOutLinks(dest).forEach((elem) => {
-			if(elem.hasAttribute("is_embed")) elem.removeAttribute("is_embed");
-		});
-		// id と name は消去
-		if(dest.id) dest.id = "";
-		dest.removeAttribute("name");
-		Array.from(dest.getElementsByTagName("*")).forEach((elem) => {
-			if(elem.id) elem.id = "";
-			if(elem.hasAttribute("name")) elem.removeAttribute("name");
-		});
-		TD.resShow(dest);	// 最後にdisp
-		return dest;
-	},
+	}
 	/**
 	 * レスアンカーから有効なレス範囲を取得します。
 	 * @param {string}	text	レスアンカーの文字列
-	 * @return {Object}	レス範囲 start, end, items をプロパティに持つオブジェクト、有効範囲がなければ null
+	 * @return {Object}	レス範囲
 	 */
 	getAnchorItems(text){
 		const resMax = ThreadDocument.countAll;
@@ -4858,7 +4588,7 @@ var ResPopup = {
 			}
 		});
 		return (range.start > resMax) ? null : range;
-	},
+	}
 	/**
 	 * イベントを処理します。
 	 * @param  {event}	e	イベント
@@ -4872,19 +4602,11 @@ var ResPopup = {
 				this.show(node, range.start, range.end, range.items);
 			}
 		}
-	},
+	}
 	/**
 	 * レス範囲を指定してレスのポップアップを表示します。
-	 * @param {Element}			source	トリガー元の要素
-	 * @param {number}  		start	ポップアップを開始するレス番号
-	 * @param {number}  		end		ポップアップを終了するレス番号
-	 * @param {Array<number>}	[items]	ポップアップ対象レスを示す配列
-	 * @param {function}		[func]	ポップアップ対象かどうかを返す関数
 	 */
 	show(source, start, end, items, func){
-		const fn = "show(source," + start + "," + end + ",items,func)";
-		this.log.info(fn);
-
 		if(!SkinPref.get("enableResPopup")) return;
 		if(end < start){
 			const tmp = end;
@@ -4901,7 +4623,6 @@ var ResPopup = {
 			items = {"0" : 1};
 			force = true;
 			if((end - start) > this.popup_limit) end = start + this.popup_limit - 1;
-			this.log.dbg("items is undefined. force=true, start=" + start + ", end=" + end);
 		}
 		Trackback.traverse();
 		const content = _doc.createDocumentFragment();
@@ -4921,24 +4642,18 @@ var ResPopup = {
 		}
 		const popupItem = Popup.add(content, source);
 		if(popupItem) ThreadDocument.modifyContent(popupItem.content);
-	},
+	}
 	/**
 	 * レス範囲を指定して表示域外のレスのポップアップを表示します。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {number}  start	ポップアップを開始するレス番号
-	 * @param {number}  end		ポップアップを終了するレス番号
 	 */
 	showExceeded(source, start, end, items, func){
-		const fn = "showExceeded(source," + start + "," + end + ",items,func)";
-		this.log.info(fn);
-
 		AjaxGet(TD.serverUrl + TD.threadUrl + start + "-" + end + "n" + "?AS=true")
 		.then((html) => {
 			const content = _doc.createDocumentFragment();
 			const divTemp  = _doc.createElement("div");
 			divTemp.innerHTML = html;
 			const container = divTemp.querySelectorAll("div.resContainer");
-			const force = (items["0"] ? true : false);
+			const force = !!items["0"];
 			for(let i = 0, n = container.length; i < n; i++){
 				if(force || items[start + i]){
 					if(func && !func(container[i])) continue;
@@ -4953,65 +4668,57 @@ var ResPopup = {
 			if(popupItem) ThreadDocument.modifyContent(popupItem.content);
 		})
 		.catch((e) => {
-			this.log.err(fn + ":" + e.message);
+			this.log.err("showExceeded: " + e.message);
 		});
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ResPopup = new ResPopupManager();
+
 
 /**
- * ID のポップアップを管理します。
- * @namespace
+ * ID のポップアップを管理するクラス
  */
-var IDPopup = {
-	log: new SkinLog("IDPopup", SkinLogLvl.WARNING),
+class IDPopupManager extends PopupBase {
+	constructor() {
+		super("IDPopup");
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
 	startup(){
-		this.log.info("startup()");
 		if(SkinPref.get("enableIDPopupOnClick")){
 			window.addEventListener("click", this, false);
 		}else{
 			window.addEventListener("mouseover", this, false);
 		}
-	},
+	}
 	/**
 	 * イベントを処理します。
 	 * @param  {event}	e	イベント
 	 */
 	handleEvent(e){
-		this.log.info("handelEvent(e)");
 		if(e.button !== 0) return;
 
 		const node = e.target;
 		if(node.nodeType !== 1) return;
 		if(node.className.match(/^resID/)){
-			IDPopup.show(node, node.getAttribute("rel"));
+			this.show(node, node.getAttribute("rel"));
 		}else if(node.className.match(/mesID_/)){
 			const pos = node.className.indexOf(" ");
 			const className = (pos === -1) ? node.className : node.className.slice(0, pos);
-			IDPopup.show(node, className.slice(6));
+			this.show(node, className.slice(6));
 		}
-	},
+	}
 	/**
 	 * IDに対応するレスのポップアップを表示します。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {number}  id		ポップアップするID
 	 */
 	show(source, id){
-		const fn = "show(source," + id + ")";
-		if(!SkinPref.get("enableIDPopup")){
-			this.log.dbg(fn + " disable");
-			return;
-		}
-		this.log.info(fn);
+		if(!SkinPref.get("enableIDPopup")) return;
 
 		const isAppendAll = SkinPref.get("enableIDPopupAll");
 		const popupid = "IDPopup:" + id;
-		if(_doc.getElementById(popupid)){
-			this.log.info("Popup " + popupid + " is exist");
-			return;
-		}
+		if(_doc.getElementById(popupid)) return;
 
 		ID.traverse();
 		const items = ID.items[id];
@@ -5051,7 +4758,7 @@ var IDPopup = {
 		}else{
 			for(let i = 0; i < n; i++){
 				const resNum = items[i];
-				const dlPopup = ResPopup.getCloneNode(Nodes.getRes(resNum));
+				const dlPopup = this.getCloneNode(Nodes.getRes(resNum));
 				if(i === 0) dlPopup.id = popupid;
 				dlPopup.className = "resPopup";
 				Trackback.appendTo(Nodes.getResBody(dlPopup), resNum);	// 逆参照
@@ -5063,31 +4770,32 @@ var IDPopup = {
 		if(!isAppendAll) nodePopup.container.className = "popupResList";
 		if(nodePopup) ThreadDocument.modifyContent(nodePopup.content);
 	}
-};
+}
+// グローバル変数名へのマッピング
+var IDPopup = new IDPopupManager();
 
 /**
- * 名前のポップアップを管理します。
- * @namespace
+ * 名前のポップアップを管理するクラス
  */
-var NamePopup = {
-	log: new SkinLog("NamePopup", SkinLogLvl.WARNING),
+class NamePopupManager extends PopupBase {
+	constructor() {
+		super("NamePopup");
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
 	startup(){
-		this.log.info("startup()");
 		if(SkinPref.get("enableNamePopupOnClick")){
 			window.addEventListener("click", this, false);
 		}else{
 			window.addEventListener("mouseover", this, false);
 		}
-	},
+	}
 	/**
 	 * イベントを処理します。
 	 * @param  {event}	e	イベント
 	 */
 	handleEvent(e){
-		this.log.info("handelEvent(e)");
 		if(e.button !== 0) return;
 
 		const node = e.target;
@@ -5109,55 +4817,41 @@ var NamePopup = {
 			break;
 		case "resSystem":
 			if(parent && parent.className === "resName"){
-				this.show(node, text);		// トリップ、!ken:コマンド、または分割してないSLIPコテハンなど
+				this.show(node, text);
 			}
 			break;
 		case "slipName":
-			this.show(node, text);			// 回線種別を示す
+			this.show(node, text);
 			break;
 		case "slipAB":
-			this.show(node, text + "-");	// 発信元情報から生成
+			this.show(node, text + "-");
 			break;
 		case "slipC":
-			this.show(node, "-" + text);	// ユーザーエージェントから生成
+			this.show(node, "-" + text);
 			break;
 		case "slipIP":
-			this.show(node, text);			// IPアドレスか端末ID
+			this.show(node, text);
 		}
-	},
+	}
 	/**
 	 * 指定した名前のレスのポップアップを表示します。
-	 * 名前がレス番号ならそのレスを、トリップかSLIP強制コテハン部分がトリガー元の場合はそれを含む名前のレスを対象とします。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {string}  name	ポップアップする名前
 	 */
 	show(source, name){
-		const fn = "show(source," + name + ")";
-		if(!SkinPref.get("enableNamePopup")){
-			this.log.dbg(fn + " disable");
-			return;
-		}
-		this.log.info(fn);
+		if(!SkinPref.get("enableNamePopup")) return;
 
 		const isAppendAll = SkinPref.get("enableNamePopupAll");
 		const popupid = "NamePopup:" + name;
-		if(_doc.getElementById(popupid)){
-			this.log.info("Popup " + popupid + " is exist");
-			return;
-		}
+		if(_doc.getElementById(popupid)) return;
 
 		Name.traverse();
 		const push = Array.prototype.push;
 		let items = [];
 		if(source.className === "popupName"){
-			// スレッド情報のリスト
 			items = Name.items[name];
 		}else{
-			// 名前欄
 			for(let key in Name.items){
 				if(key.indexOf(name) !== -1){
 					push.apply(items, Name.items[key]);
-					this.log.dbg("[" + key + "]: " + Name.items[key]);
 				}
 			}
 		}
@@ -5200,7 +4894,7 @@ var NamePopup = {
 		}else{
 			for(let i = 0; i < n; i++){
 				const resNum = items[i];
-				const dlPopup = ResPopup.getCloneNode(Nodes.getRes(resNum));
+				const dlPopup = this.getCloneNode(Nodes.getRes(resNum));
 				if(i === 0) dlPopup.id = popupid;
 				dlPopup.className = "resPopup";
 				Trackback.appendTo(Nodes.getResBody(dlPopup), resNum);	// 逆参照
@@ -5212,14 +4906,17 @@ var NamePopup = {
 		if(!isAppendAll) nodePopup.container.className = "popupResList";
 		if(nodePopup) ThreadDocument.modifyContent(nodePopup.content);
 	}
-};
+}
+// グローバル変数名へのマッピング
+var NamePopup = new NamePopupManager();
 
 /**
- * 逆参照のポップアップを管理します。
- * @namespace
+ * 逆参照のポップアップを管理するクラス
  */
-var TrackbackPopup = {
-	log: new SkinLog("TrackbackPopup", SkinLogLvl.WARNING),
+class TrackbackPopupManager extends PopupBase {
+	constructor() {
+		super("TrackbackPopup");
+	}
 	/**
 	 * イベントを処理します。
 	 * @param  {event}	e	イベント
@@ -5231,24 +4928,22 @@ var TrackbackPopup = {
 				this.show(node, RegExp.$1);
 			}
 		}
-	},
+	}
 	/**
-	 * 指定レスを参照しているレスのポップアップを表示します。TrackbackPopup.handleEvent() から呼ばれます。
-	 * @param {Element} source		トリガー元の要素
-	 * @param {number}  resNum		ポップアップするレス番号
+	 * 指定レスを参照しているレスのポップアップを表示します。
 	 */
 	show(source, resNum){
 		if(!SkinPref.get("enableTrackBackPopup")) return;
 
 		Trackback.traverse();
 		const tb = Trackback.items[resNum];
-		if(tb.length < 1) return;
+		if(!tb || tb.length < 1) return;
 
 		const appendAll = SkinPref.get("enableTrackBackPopupAll") || tb.length === 1;
 		const content = _doc.createDocumentFragment();
 		if(appendAll){
 			for(let i = 0, n = tb.length; i < n; i++){
-				const node = ResPopup.getCloneNode(ResNodes.getContainerByResNum(tb[i]));
+				const node = this.getCloneNode(ResNodes.getContainerByResNum(tb[i]));
 				node.className = "resPopup";
 				Trackback.appendTo(Nodes.getResBody(node), tb[i]);
 				content.appendChild(node);
@@ -5264,116 +4959,108 @@ var TrackbackPopup = {
 		if(!appendAll) nodePopup.container.className = "popupResList";
 		if(nodePopup) ThreadDocument.modifyContent(nodePopup.content);
 	}
-};
+}
+// グローバル変数名へのマッピング
+var TrackbackPopup = new TrackbackPopupManager();
+
 
 /**
- * 画像のポップアップを管理します。
- * @namespace
+ * 画像のポップアップを管理するクラス
  */
-var ImagePopup = {
-	log: new SkinLog("ImagePopup", SkinLogLvl.WARNING),
-	/**
-	 * 画像の URI を判別する正規表現
-	 * @type {RegExp}
-	 */
-	_imgRegExp: /\.(jpg|jpeg|gif|png|mng|tiff|tif|bmp|pict)([?:].*)?$/i,
-	_gifRegExp: /\.gif([?:].*)?$/i,
-	/**
-	 * グロチェックの正規表現
-	 * @type {RegExp}
-	 */
-	_groRegExp: null,
-	/**
-	 * ぼかしフィルターレベル
-	 * @type {number}
-	 */
-	_psLvl: 1,
-	/**
-	 * ぼかしフィルターサイズのテーブル
-	 * @type {Array<number>}
-	 */
-	_psTbl: [8, 4, 2],
-	/**
-	 * 透明度レベル
-	 * @type {number}
-	 */
-	_opLvl: 1,
-	/**
-	 * 透明度のテーブル
-	 * @type {Array<number>}
-	 */
-	_opTbl: [0.15, 0.3, 0.5, 1.0],
-	/**
-	 * ポップアップ時のパディング
-	 * @type {number}
-	 */
-	_padding: 7,
+class ImagePopupManager extends PopupBase {
+	constructor() {
+		super("ImagePopup");
+		/**
+		 * 画像の URI を判別する正規表現
+		 * @type {RegExp}
+		 */
+		this._imgRegExp = /\.(jpg|jpeg|gif|png|mng|tiff|tif|bmp|pict)([?:].*)?$/i;
+		this._gifRegExp = /\.gif([?:].*)?$/i;
+		/**
+		 * グロチェックの正規表現
+		 * @type {RegExp}
+		 */
+		this._groRegExp = null;
+		/**
+		 * ぼかしフィルターレベル
+		 * @type {number}
+		 */
+		this._psLvl = 1;
+		/**
+		 * ぼかしフィルターサイズのテーブル
+		 * @type {Array<number>}
+		 */
+		this._psTbl = [8, 4, 2];
+		/**
+		 * 透明度レベル
+		 * @type {number}
+		 */
+		this._opLvl = 1;
+		/**
+		 * 透明度のテーブル
+		 * @type {Array<number>}
+		 */
+		this._opTbl = [0.15, 0.3, 0.5, 1.0];
+		/**
+		 * ポップアップ時のパディング
+		 * @type {number}
+		 */
+		this._padding = 7;
+	}
 	/**
 	 * モザイクサイズを取得します。
-	 * @param {boolean}	isGro	グロテスク判定
-	 * @return {number}	モザイクサイズ
 	 */
 	getPixelationSize(isGro){
 		return this._psTbl[isGro ? 0 : this._psLvl];
-	},
+	}
 	/**
 	 * 透明度を取得します。
-	 * @return {number}	opacity の値
 	 */
 	getOpacity(){
 		return this._opTbl[this._opLvl];
-	},
+	}
 	/**
 	 * プロパティを初期設定します。
 	 */
 	init(){
-		this._groRegExp = null;
 		this._groRegExp = new RegExp(SkinPref.get("valueImageGroPattern"));
 		const sz = SkinPref.get("valuePixelationSize");
 		this._psLvl = (sz < 0 || 2 < sz) ? 1 : sz;
 		const lvl = SkinPref.get("valueShadeLevel");
 		this._opLvl = (lvl < 0 || 3 < lvl) ? 1 : lvl;
-	},
+	}
 	/**
 	 * プロパティを更新します。
 	 */
 	update(){
 		this.init();
-	},
+	}
 	/**
 	 * 対象の URI が画像かどうかを判別します。
-	 * @param  {string}  src	URI
-	 * @return {boolean} 画像であれば true
 	 */
 	isImage(src){
 		return this._imgRegExp.test(src) || src.startsWith("/ivur/");
-	},
+	}
 	isGif(src){
 		return this._gifRegExp.test(src);
-	},
+	}
 	/**
 	 * 対象のレス番号にグロテスク画像への注意を喚起するレスがついているか調べます。
-	 * @param  {number}		resNum	レス番号
-	 * @return {boolean} 	危険なレスであれば true
 	 */
 	isImageGrotesque(resNum){
-		const fn = "isImageGrotesque(" + resNum + ")";
-		if(!resNum){ this.log.err(fn + " 有効なレス番号ではありません"); return true; }
+		if(!resNum) return false;
 
 		Trackback.traverse();
-		// 直後のレスもチェック対象に含める
-		const nodes = Array.apply(null, Trackback.items[resNum]);
+		const nodes = Array.apply(null, Trackback.items[resNum] || []);
 		nodes.unshift(resNum + 1);
-		if(!nodes) return false;
-		return nodes.some((resNum) => {
-			const node = ResNodes.getBodyByResNum(resNum);
+		return nodes.some((num) => {
+			const node = ResNodes.getBodyByResNum(num);
 			if(!node) return false;
 			return ThreadDocument.getInnerText(node, true).some((line) => this._groRegExp.test(line));
 		});
-	},
+	}
 	/**
 	 * イベントを処理します。
-	 * @param  {event}	e	イベント
 	 */
 	handleEvent(e){
 		const node  = e.currentTarget;
@@ -5389,18 +5076,18 @@ var ImagePopup = {
 						node.className =  "imgLargePopup";
 						popup.content.style.maxWidth  = "none";
 						popup.content.style.maxHeight = "none";
-						popup.content.style.maxWidth  = e.currentTarget.offsetWidth  - this._padding;
-						popup.content.style.maxHeight = e.currentTarget.offsetHeight - this._padding;
+						popup.content.style.maxWidth  = (e.currentTarget.offsetWidth  - this._padding) + "px";
+						popup.content.style.maxHeight = (e.currentTarget.offsetHeight - this._padding) + "px";
 					}
 				}else{
 					if(node.tagName.match(/(canvas|svg)/i)){
-						popup.container.style.opacity = 1;
-						node.parentNode.childNodes[1].style.opacity = 1;
+						popup.container.style.opacity = 1.0;
+						node.parentNode.childNodes[1].style.opacity = 1.0;
 						node.parentNode.removeChild(node);
 					}else{
 						e.currentTarget.className =  "imgPopup";
-						popup.content.style.maxWidth  = e.currentTarget.offsetWidth  - this._padding;
-						popup.content.style.maxHeight = e.currentTarget.offsetHeight - this._padding;
+						popup.content.style.maxWidth  = (e.currentTarget.offsetWidth  - this._padding) + "px";
+						popup.content.style.maxHeight = (e.currentTarget.offsetHeight - this._padding) + "px";
 					}
 				}
 			}
@@ -5409,30 +5096,27 @@ var ImagePopup = {
 			if(popup) popup.source.setAttribute("title", popup.source.title ? "エラー " + popup.source.title : "エラー");
 			e.currentTarget.parentNode.removeChild(e.currentTarget);
 		}
-	},
+	}
 	/**
-	 * 画像のリサイズを監視します。show() から呼ばれます。画像のサイズが確定すると、ポップアップのサイズを調整し実際に表示します。
-	 * @param  {PopupItem}	nodePopup	PopupItem オブジェクト
+	 * 画像のリサイズを監視します。
 	 */
 	resize(nodePopup){
 		if(!nodePopup) return;
 		const last = nodePopup.content.lastChild;
 		if(!last) return;
 
-		if((last.offsetWidth > 0) && (last.offsetHeight > 0) && (last.offsetWidth !== 24) && (last.offsetHeight !== 24)){	//　magic number
-			nodePopup.content.style.maxWidth  = last.offsetWidth  - this._padding;	// magic number
-			nodePopup.content.style.maxHeight = last.offsetHeight - this._padding;	// magic number
+		if((last.offsetWidth > 0) && (last.offsetHeight > 0) && (last.offsetWidth !== 24) && (last.offsetHeight !== 24)){
+			nodePopup.content.style.maxWidth  = (last.offsetWidth  - this._padding) + "px";
+			nodePopup.content.style.maxHeight = (last.offsetHeight - this._padding) + "px";
 			Popup.reposition(nodePopup);
 			nodePopup.container.style.visibility = "visible";
 			nodePopup.container.style.opacity = this.getOpacity();
 			return;
 		}
 		window.setTimeout(this.resize.bind(this), 50, nodePopup);
-	},
+	}
 	/**
-	 * ポップアップを表示します。OutlinkPopup.handleEvent() から呼ばれます。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {string}  href	画像の URI
+	 * ポップアップを表示します。
 	 */
 	show(source, href){
 		if(!SkinPref.get("enableImagePopup")) return;
@@ -5450,11 +5134,9 @@ var ImagePopup = {
 			img.src = href;
 			window.setTimeout(this.resize.bind(this), 50, nodePopup);
 		}
-	},
+	}
 	/**
-	 * 画像を疑似モザイク化してポップアップを表示します。OutlinkPopup.handleEvent() から呼ばれます。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {string}  href	画像の URI
+	 * 画像を疑似モザイク化してポップアップを表示します。
 	 */
 	pixelateShow(source, href, is_gro){
 		if(!SkinPref.get("enableImagePopup")) return;
@@ -5471,14 +5153,12 @@ var ImagePopup = {
 			nodePopup.container.style.visibility = "hidden";
 			nodePopup.useFade = false;
 			img.onload = () => {
-				// ローカルcanvas からのgetImageData() が cross-originに抵触するためピクセル操作は断念
-				// imgの画像を縮小して描画して解像度を落とし拡大描画することでモザイクっぽくする
 				const canvas = _doc.createElement("canvas");
 				canvas.width  = img.offsetWidth;
 				canvas.height = img.offsetHeight;
 				canvas.addEventListener("click", this, false);
-				canvas.style.position   = "absolute";
-				canvas.style.zIndex = 1;
+				canvas.style.position = "absolute";
+				canvas.style.zIndex = "1";
 
 				const ps = this.getPixelationSize(is_gro);
 				const w = canvas.width  / ps;
@@ -5495,11 +5175,9 @@ var ImagePopup = {
 			img.src = href;
 			window.setTimeout(this.resize.bind(this), 50, nodePopup);
 		}
-	},
+	}
 	/**
-	 * 画像にガウスぼかしをかけてポップアップを表示します。OutlinkPopup.handleEvent() から呼ばれます。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {string}  href	画像の URI
+	 * 画像にガウスぼかしをかけてポップアップを表示します。
 	 */
 	blurShow(source, href, is_gro){
 		if(!SkinPref.get("enableImagePopup")) return;
@@ -5521,60 +5199,59 @@ var ImagePopup = {
 			window.setTimeout(this.resize.bind(this), 50, nodePopup);
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ImagePopup = new ImagePopupManager();
+
 
 /**
- * リンク先のサムネイルプレビューのポップアップを管理します。
- * @namespace
+ * リンク先のサムネイルプレビューのポップアップを管理するクラス
  */
-var UrlPopup = {
-	log: new SkinLog("UrlPopup", SkinLogLvl.WARNING),
+class UrlPopupManager extends PopupBase {
+	constructor() {
+		super("UrlPopup");
+	}
 	/**
 	 * URI がサムネイル画像へのリクエストを発行すべきか判別します。
-	 * @param  {string}		src		URI
-	 * @return {boolean}	リクエストすべきであれば true
 	 */
 	isValid(src){
-		if(src.match(/(http|https):\/\/.+\/.*\.([a-zA-Z0-9]+)$/)){
-			const ext = RegExp.$2;
-			return ext.match(/^(htm|html|shtm|shtml|stm|xml|xhtml|php|php3|php4|cgi|jsp|cfm|asp|aspx|pl|plx|py|rb|)$/);
+		const matchExt = src.match(/(http|https):\/\/.+\/.*\.([a-zA-Z0-9]+)$/);
+		if(matchExt){
+			const ext = matchExt[2];
+			return /^(htm|html|shtm|shtml|stm|xml|xhtml|php|php3|php4|cgi|jsp|cfm|asp|aspx|pl|plx|py|rb|)$/i.test(ext);
 		}
 		return true;
-	},
+	}
 	/**
 	 * イベントを処理します。
-	 * @param  {event}	e	イベント
 	 */
 	handelEvent(e){
 		if(e.type !== "error") return;
 		const popup = Popup.findPopup(e.currentTarget.parentNode);
 		if(popup) popup.source.setAttribute("title", "エラー");
 		e.currentTarget.parentNode.removeChild(e.currentTarget);
-	},
+	}
 	/**
-	 * 画像のリサイズを監視します。show() から呼ばれます。画像のサイズが確定すると、ポップアップのサイズを調整し実際に表示します。
-	 * @param  {PopupItem}	nodePopup	PopupItem オブジェクト
+	 * 画像のリサイズを監視します。
 	 */
 	resize(nodePopup){
 		if(!nodePopup) return;
 		const first = nodePopup.content.firstChild.firstChild;
 		if(!first) return;
 
-		if((first.offsetWidth > 0) && (first.offsetHeight > 0) && (first.offsetWidth !== 28) && (first.offsetHeight !== 28)){	//　magic number
+		if((first.offsetWidth > 0) && (first.offsetHeight > 0) && (first.offsetWidth !== 28) && (first.offsetHeight !== 28)){
 			nodePopup.container.className = "popupImage";
 			first.className = "urlPopup";
-			nodePopup.content.style.maxWidth  = first.offsetWidth  - 7;	// magic number
-			nodePopup.content.style.maxHeight = first.offsetHeight - 7;
+			nodePopup.content.style.maxWidth  = (first.offsetWidth  - 7) + "px";
+			nodePopup.content.style.maxHeight = (first.offsetHeight - 7) + "px";
 			Popup.reposition(nodePopup);
 			nodePopup.container.style.visibility = "visible";
 			return;
 		}
 		window.setTimeout(this.resize.bind(this), 10, nodePopup);
-	},
+	}
 	/**
-	 * ポップアップを表示します。OutlinkPopup.handleEvent() から呼ばれます。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {string}  href	リンク先の URI
+	 * ポップアップを表示します。
 	 */
 	show(source, href){
 		if(!SkinPref.get("enableUrlPopup")) return;
@@ -5601,42 +5278,38 @@ var UrlPopup = {
 			window.setTimeout(this.resize.bind(this), 10, nodePopup);
 		}
 	}
-};
-
+}
+// グローバル変数名へのマッピング
+var UrlPopup = new UrlPopupManager();
 
 /**
- * 動画サイトのポップアップを管理します。
- * @namespace
+ * 動画サイトのポップアップを管理するクラス
  */
-var VideoPopup = {
-	log: new SkinLog("VideoPopup", SkinLogLvl.WARNING),
+class VideoPopupManager extends PopupBase {
+	constructor() {
+		super("VideoPopup");
+	}
 	/**
 	 * ポップアップ動画のサイズ
 	 * @type {Object}
 	 */
 	get videoSize(){
 		return SelOpts.PopupVideoSize[SkinPref.get("valuePopupVideoSize")];
-	},
+	}
 	/**
 	 * URI から動画のプレビューのための正しいソース URI を取得します。
-	 * @param  {string}		src			動画のソースURI
-	 * @param  {boolean}	is_embed	インライン表示フラグ
-	 * @return {string} 	動画の埋め込み用ソースURI
 	 */
 	getVideoSource(src, is_embed){
-		const fn = "getVideoSource(" + src + "," + is_embed + ")";
-		this.log.info(fn);
 		let href = null;
 
 		if(src.match(/(?:\.youtube\.com\/watch\?.*v=|youtu\.be\/)([^&#\? ]+)(.*)/)){
-			this.log.dbg("YouTube");
 			const videoId = RegExp.$1;
 			const param = RegExp.$2 || "";
 			const tm = /.*[\?&#]+t=((\d+)m)?(\d+)s?/.exec(param);
 			let start = 0, min = 0;
 			if(tm){
-				if(tm[2])	min = parseInt(tm[2]);
-				start = min * 60 + parseInt(tm[3]);
+				if(tm[2])	min = parseInt(tm[2], 10);
+				start = min * 60 + parseInt(tm[3], 10);
 			}
 			let option = "?start=" + start;
 			if(SkinPref.get("disableRelatedVideo")) option += "&rel=0";
@@ -5644,66 +5317,48 @@ var VideoPopup = {
 			if(!is_embed && SkinPref.get("videoPopupAutoStart")) option += "&autoplay=1";
 			href = "https://www.youtube.com/embed/" + videoId + option;
 		}else if(src.match(/\.nicovideo.jp\/watch\/([^&\? ]+)/)){
-			this.log.dbg("ニコニコ動画");
 			const videoId = RegExp.$1;
-			const videoSize = is_embed ? ResImage.videoSize : VideoPopup.videoSize;
+			const videoSize = is_embed ? ResImage.videoSize : this.videoSize;
 			href = TD.skinPath + "nicovideo.html?url=http://ext.nicovideo.jp/thumb_watch/" +
 				videoId + "?w=" + videoSize.width + "&h=" + videoSize.height;
 	    }else if(src.match(/(?:\.dailymotion\.com\/video|dai\.ly)\/([^&\?_ ]+)/)){
-			this.log.dbg("dailymotion");
 			const videoId = RegExp.$1;
 			href = "http://www.dailymotion.com/embed/video/" + videoId;
 		}else if(src.match(/\.veoh\.com\/watch\/([^&\? ]+)/)){
-			this.log.dbg("veoh");
 			const videoId = RegExp.$1;
 			const option = "&player=videodetailsembedded&videoAutoPlay=0";
 			href = "http://www.veoh.com/swf/webplayer/WebPlayer.swf?permalinkId=" + videoId + option;
 		}else if(src.match(/vimeo\.com\/(?:.*\/)?([^&\? ]+)/)){
-			this.log.dbg("vimeo");
 			const videoId = RegExp.$1;
 			href = "https://player.vimeo.com/video/" + videoId;
 		}else if(src.match(/\.metacafe\.com\/watch\/([^\/&\?_ ]+)/)){
-			this.log.dbg("metacafe");
 			const videoId = RegExp.$1;
 			href = "http://www.metacafe.com/embed/" + videoId;
 		}
-		this.log.dbg("href=" + href);
 		return href;
-	},
+	}
 	/**
-	 * ポップアップを表示します。OutlinkPopup.handleEvent() から呼ばれます。
-	 * @param 	{Element}	source	トリガー元の要素
-	 * @param 	{string}	href	埋め込み用ソースURI
-	 * @param 	{Element} 	obj		埋め込む要素
+	 * ポップアップを表示します。
 	 */
 	show(source, href, obj){
-		this.log.info("show(source," + href + ",obj)");
-
 		const nodePopup = Popup.add(obj, source);
 		if(nodePopup){
 			nodePopup.container.className = "popupVideo";
 			Popup.reposition(nodePopup);
 		}
-	},
+	}
 	/**
 	 * 動画を埋め込んだオブジェクトを生成します。
-	 * @param 	{string}	href		動画の埋め込み用ソースURI ※getVideoSource()の戻り値です。
-	 * @param  {boolean}	is_embed	インライン表示フラグ
-	 * @return 	{Element}	埋め込み要素
 	 */
 	getElement(href, is_embed){
-		const fn = "getElement(" + href + ")";
-		this.log.info(fn);
 		if(!href) return null;
 
 		const _htmlToDOM = (html) => {
-			this._parent = document.createElement("div");
-			this._parent.innerHTML = html || "";
-			const element = (this._parent.childNodes.length > 1) ? this._parent.childNodes : this._parent.firstChild;
-			delete this._parent;
-			return element;
+			const parent = document.createElement("div");
+			parent.innerHTML = html || "";
+			return (parent.childNodes.length > 1) ? parent.childNodes : parent.firstChild;
 		};
-		const videoSize = is_embed ? ResImage.videoSize : VideoPopup.videoSize;
+		const videoSize = is_embed ? ResImage.videoSize : this.videoSize;
 		const html = [
 			'<iframe width="', videoSize.width,
 			'" height="', videoSize.height,
@@ -5712,41 +5367,36 @@ var VideoPopup = {
 		].join("");
 		return _htmlToDOM(html);
 	}
-};
+}
+// グローバル変数名へのマッピング
+var VideoPopup = new VideoPopupManager();
+
 
 /**
- * スレッド情報のポップアップを管理します。
- * @namespace
+ * スレッド情報のポップアップを管理するクラス
  */
-var ThreadInfoPopup = {
-	log: new SkinLog("ThreadInfoPopup", SkinLogLvl.WARNING),
-	/**
-	 * スレッド情報のキャッシュ
-	 */
-	_threadInfoCache: [],
+class ThreadInfoPopupManager extends PopupBase {
+	constructor() {
+		super("ThreadInfoPopup");
+		/**
+		 * スレッド情報のキャッシュ
+		 */
+		this._threadInfoCache = [];
+	}
 	/**
 	 * スレッドURLか判定します。
-	 * @param 	{string}	href	リンクのURL
-	 * @return	{boolean}	判定結果
 	 */
 	isThread(href){
 		const reThread = [ /\/test\/read\.cgi\//, /\/bbs\/read\.cgi\// ];
-		let ret = false;
-		reThread.forEach((re) => { if(re.test(href)) ret = true; return; });
-		return ret;
-	},
+		return reThread.some((re) => re.test(href));
+	}
 	/**
-	 * ポップアップを表示します。OutlinkPopup.handleEvent() から呼ばれます。
-	 * @param {Element} source	トリガー元の要素
-	 * @param {string}  href	リンク先の URI
+	 * ポップアップを表示します。
 	 */
 	show(source, href){
 		if(!SkinPref.get("enableThreadInfoPopup")) return;
-		const fn = "show(source," + href + ")";
-		this.log.info(fn);
 		if(!this.isThread(href)) return;
 
-		// ポップアップ表示関数定義
 		const popup = (info) => {
 			const content = _doc.createDocumentFragment();
 			const div = _doc.createElement("div");
@@ -5761,83 +5411,77 @@ var ThreadInfoPopup = {
 			Popup.add(content, source);
 		};
 
-		/(.+)\/[^\/]*$/.exec(href);
-		const url = RegExp.$1 + "/";
+		const matchPath = href.match(/(.+)\/[^\/]*$/);
+		if (!matchPath) return;
+		const url = matchPath[1] + "/";
 
 		if(url in this._threadInfoCache){
-			this.log.dbg("_threadInfoCache[" + url + "] is found");
 			popup(this._threadInfoCache[url]);
 		}else{
 			this._threadInfoCache[url] = {};
-			// 板名
 			const boardUrl = Board.getUrlByThread(url);
-			this.log.dbg("boardUrl=" + boardUrl);
 			const name = Board.getName(boardUrl);
-			this.log.dbg("boardName=" + name);
 			this._threadInfoCache[url].boardText = "板名：" + ((typeof name === "undefined") ? "不明" : name);
 			this._threadInfoCache[url].titleText = "スレッド名：不明";
 			this._threadInfoCache[url].numsText = "件数：不明";
-			// スレッド内容をchaika経由で取得 ※ /1n ならログがあれば新着あっても読み込まない
+
 			AjaxGet(TD.serverUrl + url + "1n", true)
 			.then((html) => {
 				if(!html) return;
 				const tmpDoc = document.createElement("div");
 				tmpDoc.innerHTML = html;
-				// タイトル
-				const title = tmpDoc.querySelector("#threadName").textContent;
-				this.log.dbg("threadName=" + title);
+				const title = tmpDoc.querySelector("#threadName")?.textContent;
 				this._threadInfoCache[url].titleText = "スレッド名：" + ((typeof title === "undefined") ? "不明" : title);
-				// 件数
+
 				const footer = tmpDoc.querySelector("#footer");
-				const allCount = footer.getAttribute("allres");
-				const getCount = footer.getAttribute("getres");
-				const newCount = footer.getAttribute("newres");
-				this.log.dbg("all=" + allCount + ", get=" + getCount + ", new=" + newCount);
-				// 未読スレを先読みした場合、先頭レスにしおり設定
-				const mark = Bookmark.load(url);
-				if(!mark){
-					if(SkinPref.get("enableThreadInfoPopupAutoBookmark") && getCount <= 0){
-						Bookmark.save(url, 1);
+				if(footer){
+					const allCount = footer.getAttribute("allres");
+					const getCount = parseInt(footer.getAttribute("getres"), 10);
+					if(Bookmark.load(url) === 0){
+						if(SkinPref.get("enableThreadInfoPopupAutoBookmark") && getCount <= 0){
+							Bookmark.save(url, 1);
+						}
 					}
+					this._threadInfoCache[url].numsText = "件数：" + ((typeof allCount === "undefined") ? "不明" : allCount + " 件");
 				}
-				this._threadInfoCache[url].numsText = "件数：" + ((typeof allCount === "undefined") ? "不明" : allCount + " 件");
 				popup(this._threadInfoCache[url]);
 			})
 			.catch((e) => {
-				this.log.err(fn + ":" + e.message);
+				this.log.err("show error: " + e.message);
 				this._threadInfoCache[url].titleText = "スレッド名：不明";
 				this._threadInfoCache[url].numsText = "件数：不明";
 				popup(this._threadInfoCache[url]);
 			});
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ThreadInfoPopup = new ThreadInfoPopupManager();
 
 /**
- * スレッドテンプレートのポップアップを管理します。
- * @namespace
+ * スレッドテンプレートのポップアップを管理するクラス
  */
-var TemplatePopup = {
-	log: new SkinLog("TemplatePopup", SkinLogLvl.WARNING),
-	/**
-	 * >>1 のID
-	 * @type {string}
-	 */
-	_builderId: null,
-	/**
-	 * >>1 の日付の1970/1/1 00:00:00 (UTC)からのミリ秒値
-	 * @type {number}
-	 */
-	_startTime: null,
+class TemplatePopupManager extends PopupBase {
+	constructor() {
+		super("TemplatePopup");
+		/**
+		 * >>1 のID
+		 * @type {string}
+		 */
+		this._builderId = null;
+		/**
+		 * >>1 の日付の1970/1/1 00:00:00 (UTC)からのミリ秒値
+		 * @type {number}
+		 */
+		this._startTime = null;
+	}
 	/**
 	 * 指定のレス要素がテンプレートポップアップ対象かどうかを判定します。
-	 * >>1 に有効なIDがあればそのIDのみ、IDがなければ指定された絞込時間以内を対象とします。
-	 * @param {Element}		node	レス要素
-	 * @return {boolean} 	ポップアップ対象どうか
 	 */
 	selectRes(node){
 		if(!this._builderId){
-			const id = Nodes.getResID(Nodes.getResHeader(Nodes.getRes(1))).getAttribute("rel");
+			const resOne = Nodes.getRes(1);
+			const id = resOne ? Nodes.getResID(Nodes.getResHeader(resOne)).getAttribute("rel") : null;
 			if(ID.isValidID(id)) this._builderId = id;
 			else                 this._builderId = '???';
 		}
@@ -5852,15 +5496,15 @@ var TemplatePopup = {
 			if((this._startTime + minute * 60 * 1000) < time) return false;
 		}
 		return true;
-	},
+	}
 	/**
-	 * ポップアップを表示します。onMouseOver() から呼ばれます。
-	 * @param {event}	e	イベント
+	 * ポップアップを表示します。
 	 */
 	show(e){
 		const template = _doc.getElementById("TemplateBody");
+		if (!template) return;
 		const top = _doc.getElementById("header").offsetHeight;
-		template.style.top = top + window.scrollY;
+		template.style.top = (top + window.scrollY) + "px";
 		const div = _doc.createElement("div");
 		template.appendChild(div);
 
@@ -5873,29 +5517,31 @@ var TemplatePopup = {
 			ResPopup.show(div, 1, end);
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var TemplatePopup = new TemplatePopupManager();
+
 
 /**
- * ポップアップのイベント処理を扱います。
- * @namespace
+ * ポップアップのイベント処理を扱うクラス
  */
-var OutlinkPopup = {
+class OutlinkPopupManager extends PopupBase {
+	constructor() {
+		super("OutlinkPopup");
+	}
 	/**
 	 * イベントを処理します。
-	 * @param  {event}	e	イベント
 	 */
 	handleEvent(e){
 		if(e.type !== "mouseover") return;
 		const node = e.target;
 		const blocked = node.className === "ivurBlockedLink";
 		const ivurLink = node.className === "ivurLink" && !VideoPopup.getVideoSource(node.rel, false);
-		const src = (ivurLink ? "/ivur/" : "") + node.rel; // URLをrel属性にあらかじめセットしておいて受け取る
+		const src = (ivurLink ? "/ivur/" : "") + node.rel;
 
 		if(ThreadInfoPopup.isThread(src)){
-			// スレッド情報ポップアップ
 			ThreadInfoPopup.show(node, src);
 		}else if(blocked){
-			// ユーザーによる画像ブロック
 			const ft = _doc.createElement("div");
 			const content = _doc.createElement("div");
 			content.textContent = "ImageViewURLReplace.dat によって無効化されたリンクです";
@@ -5909,13 +5555,10 @@ var OutlinkPopup = {
 				show.style.padding = "6px";
 				show.style.border = "1px solid";
 				show.style.cursor = "pointer";
-				show.addEventListener("click", function(){
-					// 現在のポップアップを消去
-					Popup.remove_last(); // 特定のポップアップを消去する API が無いので remove_last() で代用
-
-					// ブロックを解除して画像ポップアップ
+				show.addEventListener("click", () => {
+					Popup.remove_last();
 					node.className = "outLink";
-					OutlinkPopup.handleEvent(e);
+					this.handleEvent(e);
 				}, { once: true });
 
 				ft.style.textAlign = "center";
@@ -5925,7 +5568,6 @@ var OutlinkPopup = {
 			content.appendChild(ft);
 			Popup.add(content, node);
 		}else if(ImagePopup.isImage(src)){
-			// 画像ポップアップ
 			if(node.getAttribute("no_popup")) return;
 			const resNum = ResNodes.getResNumByOutLink(node);
 			const is_gro = SkinPref.get("enableImageGroCheck") && ImagePopup.isImageGrotesque(resNum);
@@ -5945,7 +5587,6 @@ var OutlinkPopup = {
 				ImagePopup.show(node, src);
 			}
 			if(is_gro) node.setAttribute("title", "表示注意");
-			// 埋め込み画像のロード
 			if(SkinPref.get("enableEmbedLoadOnLinkMouseOver")){
 				const body = ResNodes.getBodyByResNum(resNum);
 				if(!body) return;
@@ -5953,7 +5594,6 @@ var OutlinkPopup = {
 				.forEach((frame) => (frame.getAttribute("src") === src) && ResImage.loadImage(frame, src));
 			}
 		}else{
-			// 動画ポップアップ or 外部サイトサムネイル
 			const embedSrc = VideoPopup.getVideoSource(src, false);
 			if(embedSrc){
 				if(node.getAttribute("no_popup")) return;
@@ -5964,7 +5604,9 @@ var OutlinkPopup = {
 			}
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var OutlinkPopup = new OutlinkPopupManager();
 
 //======================================
 // コンテキストメニュー関連
@@ -6687,29 +6329,24 @@ var ChevronContextMenu = {
 };
 
 /**
- * 独自ダイアログを表示します。
- * @namespace
+ * 独自ダイアログを管理するクラス
  */
-var Dialog = {
-	/**
-	 * [オプション] ダイアログを表示します。
-	 */
+class DialogManager {
 	showOption(){
 		if(OptionsDialog === null){
 			OptionsDialog = new dialogOptions();
 		}
 		OptionsDialog.show();
-	},
-	/**
-	 * [スレッド情報] ダイアログを表示します。
-	 */
+	}
 	showAnalyse(){
 		if(AnalyseDialog === null){
 			AnalyseDialog = new dialogAnalyse();
 		}
 		AnalyseDialog.analyse();
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Dialog = new DialogManager();
 
 /**
  * コンテキストメニューのイベントリスナを登録します。
@@ -8024,44 +7661,52 @@ class dialogOptions {
 //======================================
 
 /**
- * スレッドから情報を解析してまとめて表示します。
- * @namespace
+ * スレッドから情報を解析してまとめて表示するクラス
  */
-var Analyse = {
+class AnalyseManager {
 	/**
 	 * 指定されたレス番号の日付欄の内容をDate型に変換して返します。
 	 * @param  {number} resNum	レス番号
 	 * @return {Date}	日付値
 	 */
 	getDate(resNum){
-		const str = Nodes.getResDate(Nodes.getResHeader(Nodes.getRes(resNum))).textContent;
+		const res = Nodes.getRes(resNum);
+		if (!res) return new Date();
+		const str = Nodes.getResDate(Nodes.getResHeader(res)).textContent;
 		return this.getDateFromString(str);
-	},
+	}
 	/**
 	 * 日付欄の文字列をDate型に変換します。
 	 * @param  {string} str		日付欄の文字列
 	 * @return {Date}	日付値
 	 */
 	getDateFromString(str){
-		str.match(/^(\d{4}|\d{2})\/(\d{2})\/(\d{2})/);
-		let fullYear  = parseInt(RegExp.$1);
+		const matchDate = str.match(/^(\d{4}|\d{2})\/(\d{2})\/(\d{2})/);
+		if (!matchDate) return new Date();
+
+		let fullYear = parseInt(matchDate[1], 10);
 		if(fullYear < 100) fullYear += (fullYear >= 90) ? 1900 : 2000;
-		const date = new Date(RegExp.$2 + "/" + RegExp.$3 + "/" + fullYear);
-		if(str.match(/(\d{2}):(\d{2}):(\d{2}).(\d{2})(\s|$)/)){
-			date.setHours(parseInt(RegExp.$1));
-			date.setMinutes(parseInt(RegExp.$2));
-			date.setSeconds(parseInt(RegExp.$3));
-			date.setMilliseconds(parseInt(RegExp.$4));
-		}else if(str.match(/(\d{2}):(\d{2}):(\d{2})(\s|$)/)){
-			date.setHours(parseInt(RegExp.$1));
-			date.setMinutes(parseInt(RegExp.$2));
-			date.setSeconds(parseInt(RegExp.$3));
-		}else if(str.match(/(\d{2}):(\d{2})(\s|$)/)){
-			date.setHours(parseInt(RegExp.$1));
-			date.setMinutes(parseInt(RegExp.$2));
+		const date = new Date(`${matchDate[2]}/${matchDate[3]}/${fullYear}`);
+
+		const matchTime4 = str.match(/(\d{2}):(\d{2}):(\d{2}).(\d{2})(\s|$)/);
+		const matchTime3 = str.match(/(\d{2}):(\d{2}):(\d{2})(\s|$)/);
+		const matchTime2 = str.match(/(\d{2}):(\d{2})(\s|$)/);
+
+		if(matchTime4){
+			date.setHours(parseInt(matchTime4[1], 10));
+			date.setMinutes(parseInt(matchTime4[2], 10));
+			date.setSeconds(parseInt(matchTime4[3], 10));
+			date.setMilliseconds(parseInt(matchTime4[4], 10));
+		}else if(matchTime3){
+			date.setHours(parseInt(matchTime3[1], 10));
+			date.setMinutes(parseInt(matchTime3[2], 10));
+			date.setSeconds(parseInt(matchTime3[3], 10));
+		}else if(matchTime2){
+			date.setHours(parseInt(matchTime2[1], 10));
+			date.setMinutes(parseInt(matchTime2[2], 10));
 		}
 		return date;
-	},
+	}
 	/**
 	 * ミリ秒を日本語の時間表記に変換します。
 	 * @param  {number} msec	時間（ミリ秒）
@@ -8106,7 +7751,7 @@ var Analyse = {
 		if(val > 0) str += val + "秒";
 
 		return str;
-	},
+	}
 	/**
 	 * スレッドの勢いを取得します。
 	 * @param {Object}	resRange	表示中のレス番号範囲
@@ -8124,7 +7769,9 @@ var Analyse = {
 			return this.toStringfromTimeDiff(totalTime / countAll) + " / レス";
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Analyse = new AnalyseManager();
 
 //======================================
 // [スレッド情報] ダイアログ関連
@@ -8815,30 +8462,27 @@ var ReplaceStr = {
 //======================================
 
 /**
- * 即時あぼーんやあぼーんレスの展開/折り畳み動作に対応します。
- * @namespace
- * @see {@link https://github.com/chaika/chaika/wiki/即時あぼーんの実装}
+ * 即時あぼーんやあぼーんレスの展開/折り畳み動作に対応するクラス
  */
-var b2rAboneHandler = {
-	log: new SkinLog("b2rAboneHandler", SkinLogLvl.WARNING),
+class b2rAboneHandlerManager {
+	constructor() {
+		this.log = new SkinLog("b2rAboneHandler", SkinLogLvl.WARNING);
+	}
 	/**
 	 * イベントリスナを登録します。
 	 */
 	startup(){
 		this.log.info("startup()");
-
 		_doc.addEventListener("click", this, false);
 		_doc.addEventListener("chaika-abone-add", this, false);
 		_doc.addEventListener("chaika-abone-remove", this, false);
-	},
+	}
 	/**
-	 * chaika であぼーん追加/削除時のイベントを処理します。
-	 * @param {event} aEvent イベント
+	 * あぼーん追加/削除時のイベントを処理します。
 	 */
 	handleEvent(aEvent){
 		const fn = "handleEvent()";
 		this.log.info(fn);
-		this.log.dbg("aEvent.type=" + aEvent.type);
 
 		if(aEvent.type === "click"){
 			const node = aEvent.target;
@@ -8854,21 +8498,18 @@ var b2rAboneHandler = {
 			const ngClass = {name:"resName", mail:"resMail", id:"resID", word: "resBody"}[ngType];
 			if(!ngClass){
 				if(SkinPref.get("enableReloadChangeNGEx")){
-					// NGEx はスキン上で即時反映は無理なのでリロードする
 					this.reloadThread(false);
 					return;
 				}
 			}
 
 			Array.from(Nodes.content.getElementsByClassName(ngClass)).forEach((elem) => {
-				this.log.dbg("elem.textContent=" + elem.textContent);
 				if(elem.textContent.indexOf(ngWord) !== -1){
-					this.log.dbg("hit ngWord=" + ngWord);
 					const res = ResNodes.getParentContainer(elem);
 					const infoAbone = Nodes.getInfoAbone(Nodes.getResHeader(res));
 					if(isAdd){
-						res.setAttribute("concealed", true);
-						res.setAttribute("aboned", true);
+						res.setAttribute("concealed", "true");
+						res.setAttribute("aboned", "true");
 						infoAbone.title = ngWord;
 						infoAbone.style.display = "block";
 					}else{
@@ -8880,10 +8521,9 @@ var b2rAboneHandler = {
 				}
 			});
 		}
-	},
+	}
 	/**
 	 * あぼーんの設定変更を反映させるためスレッドをリロードします。
-	 * @param {boolean} toggle	trueならあぼーん無効/有効のトグル動作をします。
 	 */
 	reloadThread(toggle){
 		this.log.info("reloadThread()");
@@ -8900,190 +8540,151 @@ var b2rAboneHandler = {
 			location.href = url;
 		}
 	}
-};
-b2rAboneHandler.startup();	// ここで実行
+}
+// グローバル変数名へのマッピング
+var b2rAboneHandler = new b2rAboneHandlerManager();
+b2rAboneHandler.startup();
 
 //======================================
 // Flashプラグイン関連
 //======================================
 
 /**
- * 新着時に音を鳴らす処理です。オリジナルは公式Uploader 091.zip に含まれていた
- * SoundUnit/SoundUnit.swf を埋め込んで即時再生しています。
- * HTML5 の Audio に対応している場合は同 swf から抽出したMP3を鳴らします。
- * @namespace
+ * 新着時に音を鳴らす処理を管理するクラス
  */
-var SoundUnit = {
-	now: 0,
-	lastExecute: 0,
-	_unit: null,
-	audio: null,
-
-	/**
-	 * MP3を再生します。
-	 * @return {boolean}	再生できたら true、不可なら false
-	 */
-	playMP3(){
-		if(!Audio){
-			return false;
-		}else{
-			let ret;
-			try{
-				if(!this.audio)	this.audio = new Audio("");
-				const support = this.audio.canPlayType("audio/mpeg");
-				if(support !== ""){
-					this.audio.src = TD.skinPath + "flash/sound.mp3";
-					this.audio.play();
-				}else{
-					throw false;
-				}
-				ret = true;
-			}catch(err){
-				ret = false;
-			}
-			return ret;
-		}
-	},
-	/**
-	 * SWF を再生します。
-	 */
-	playSWF(){
-		this.now = new Date().getTime();
-		if(this.now < this.lastExecute + 100) return;
-		this.lastExecute = this.now;
-
-		if(!this._unit){
-			const div = _doc.createElement("div");
-			div.id = "SoundUnit";
-			_doc.body.appendChild(div);
-			this._unit = div;
-		}
-		this._unit.innerHTML = '<embed src="' + TD.skinPath + 'flash/sound.swf" width="0" height="0">';
-	},
+class SoundUnitManager {
+	constructor(){
+		this.audio = null;
+	}
 	/**
 	 * 新着時の音を再生します。
 	 */
 	play(){
-		if(!this.playMP3()){
-			this.playSWF();
+		try {
+			if (!this.audio) {
+				this.audio = new Audio(TD.skinPath + "flash/sound.mp3");
+			}
+			this.audio.currentTime = 0;
+			this.audio.play().catch(err => {
+				console.warn("Audio playback failed (user interaction required?):", err);
+			});
+		} catch (e) {
+			console.error("Audio initialization failed:", e);
 		}
 	}
-};
+	// 互換性のためのダミー
+	playMP3() { return true; }
+	playSWF() {}
+}
+// グローバル変数名へのマッピング
+var SoundUnit = new SoundUnitManager();
 
 /**
- * クリップボード操作を行います。
- * @namespace
+ * クリップボード操作を行うクラス
  */
-var Clipboard = {
-	copy_text: null,
-	button: null,
-	f: null,
-	cb: null,
-	ready: false,
-
-	/**
-	 * copy.swf へコピーする文字列を渡します。
-	 */
-	doCopy(){
-		return this.copy_text;
-	},
-	/**
-	 * 文字列をクリップボードにコピーします。
-	 * @param {string}	text	文字列
-	 */
-	setClipboard(text){
-		// Firefox 41 から対応している document.execCommand('copy') によるコピー
-		this.cb.innerHTML = text.replace(/\n/g, "<br>");
-		const range = document.createRange();
-		range.selectNode(this.cb);
-		window.getSelection().addRange(range);
-		try{
-			document.execCommand('copy');
-		}catch(err){
-			console.log("execCommand('copy') に非対応なブラウザ");
-		}
-		window.getSelection().removeAllRanges();
-		this.cb.innerHTML = "";
-	},
+class ClipboardManager {
+  constructor(){
+		this.cb = null;
+		// 互換用プロパティ
+		this.copy_text = null;
+	}
+	doCopy() { return this.copy_text; }
 	/**
 	 * 仮想クリップボードを準備します。
 	 */
 	init(){
-		// 仮想クリップボードに使うDOM要素はサイズ 0 x 0 はOKだが
-		// style="visibility:hidden" にすると文字を取得できないので注意
 		this.cb = _doc.getElementById('div-clipboard');
 	}
-};
+	/**
+	 * 文字列をクリップボードにコピーします。（モダン非同期API優先）
+	 * @param {string}	text	文字列
+	 */
+	setClipboard(text){
+		if (navigator.clipboard) {
+			navigator.clipboard.writeText(text).catch(err => {
+				console.warn("Async clipboard failed, falling back to document.execCommand:", err);
+				this.fallbackCopy(text);
+			});
+		} else {
+			this.fallbackCopy(text);
+		}
+	}
+	/**
+	 * 旧来のクリップボードコピーロジック（フォールバック用）
+	 */
+	fallbackCopy(text) {
+		if (!this.cb) return;
+		this.cb.innerHTML = text.replace(/\n/g, "<br>");
+		const range = document.createRange();
+		range.selectNode(this.cb);
+		const selection = window.getSelection();
+		selection.removeAllRanges();
+		selection.addRange(range);
+		try{
+			document.execCommand('copy');
+		}catch(err){
+			console.error("Fallback clipboard copy failed:", err);
+		}
+		selection.removeAllRanges();
+		this.cb.innerHTML = "";
+	}
+}
+// グローバル変数名へのマッピング
+var Clipboard = new ClipboardManager();
+
+
 
 //======================================
 // Punycode エンコーダ関連
 //======================================
 
 /**
- * Punycode エンコーダ
- * @namespace
- * @see C. Punycode sample implementation
- * @see http://www.ietf.org/rfc/rfc3492.txt
+ * Punycode エンコーダクラス
  */
-var Punycode = {
-	/*
-	 *  5. Parameter values for Punycode
-	 */
-	BASE: 36,
-	TMIN: 1,
-	TMAX: 26,
-	SKEW: 38,
-	DAMP: 700,
-	INITIAL_BIAS: 72,
-	INITIAL_N: 0x80,
-	DELIMITER: 0x2d,
-
-	_char_code_a: "a".charCodeAt(0),
-	_char_code_0: "0".charCodeAt(0),
+class PunycodeEncoder {
+	constructor(){
+		this.BASE = 36;
+		this.TMIN = 1;
+		this.TMAX = 26;
+		this.SKEW = 38;
+		this.DAMP = 700;
+		this.INITIAL_BIAS = 72;
+		this.INITIAL_N = 0x80;
+		this.DELIMITER = 0x2d;
+		this._char_code_a = "a".charCodeAt(0);
+		this._char_code_0 = "0".charCodeAt(0);
+	}
 
 	encode_digit(d){
-		/*  0..25 map to ASCII "a".."z" */
-		/* 26..35 map to ASCII "0".."9" */
 		return (d < 26 ? this._char_code_a + d: this._char_code_0 + (d - 26));
-	},
+	}
 
-	/*
-	 *  6.1 Bias adaptation function
-	 */
 	adapt(delta, numpoints, firsttime){
-		delta  = firsttime ? parseInt(delta / this.DAMP) : delta >> 1;
-		delta += parseInt(delta / numpoints);
+		delta  = firsttime ? parseInt(delta / this.DAMP, 10) : delta >> 1;
+		delta += parseInt(delta / numpoints, 10);
 
 		let k = 0;
 		const cond = ((this.BASE - this.TMIN) * this.TMAX) >> 1;
 		for( ; delta > cond; k += this.BASE){
-			delta = parseInt(delta / (this.BASE - this.TMIN));
+			delta = parseInt(delta / (this.BASE - this.TMIN), 10);
 		}
-		return k + parseInt((this.BASE - this.TMIN + 1) * delta / (delta + this.SKEW));
-	},
+		return k + parseInt((this.BASE - this.TMIN + 1) * delta / (delta + this.SKEW), 10);
+	}
 
 	encode(input){
 		const input_array = [];
-
-		/* pre process */
 		for(let i = 0, len = input.length; i < len; i++){
 			input_array.push(input.charCodeAt(i));
 		}
-		/* encode main */
 		const output = this.encode_main(input_array);
-
-		/* post process */
 		for(let i = 0, len = output.length; i < len; i++){
 			const c = output[i];
 			if(!(c >= 0 && c <= 127)) break;
 			output[i] = String.fromCharCode(c);
 		}
 		return output.join("");
-	},
+	}
 
-	/*
-	 *  6.3 Encoding procedure
-	 */
 	encode_main(input){
 		const output = [];
 
@@ -9107,14 +8708,14 @@ var Punycode = {
 			}
 
 			if(m - n > (Infinity - delta) / (handled + 1)){
-				throw "punycode overflow (1)";
+				throw new Error("punycode overflow (1)");
 			}
 			delta += (m - n) * (handled + 1);
 			n = m;
 
 			for(let i = 0, len = input.length; i < len; i++){
 				if(input[i] < n && ++delta === 0){
-					throw "punycode overflow (2)";
+					throw new Error("punycode overflow (2)");
 				}
 				if(input[i] === n){
 					let q = delta;
@@ -9125,7 +8726,7 @@ var Punycode = {
 						if(q < t) break;
 
 						output.push(this.encode_digit(t + (q - t) % (this.BASE - t)));
-						q = parseInt((q - t) / (this.BASE - t));
+						q = parseInt((q - t) / (this.BASE - t), 10);
 					}
 					output.push(this.encode_digit(q));
 					bias = this.adapt(delta, handled + 1, handled === bcp);
@@ -9138,21 +8739,29 @@ var Punycode = {
 		}
 		return output;
 	}
-};
+}
+// グローバル変数名へのマッピング
+var Punycode = new PunycodeEncoder();
 
-Nodes.threadName.onclick = () => TD.reload();
-_doc.getElementById("autoReload").onclick = () => AutoReload.toggle();
-_doc.getElementById("autoScroll").onclick = () => AutoScroll.toggle();
-_doc.getElementById("reloadMenu").onchange = () => ReloadThread();
-_doc.getElementById("goPrev").onclick = () => TD.movePage('prev');
-_doc.getElementById("showAll").onclick = () => TD.showAll();
-_doc.getElementById("writeTo").onclick = () => TD.writeTo();
-_doc.getElementById("find").onclick = () => FindBox.show();
-Nodes.findBoxText.onfocus = () => Nodes.findBoxText.select();
-Nodes.findObject.onchange = () => FindBox.find();
-Nodes.findContent.onchange = () => FindBox.find();
-_doc.getElementById("showBar").onclick = () => Titlebar.showBar();
-Nodes.statusText.onclick = () => TD.scrollToNewRes();
+
+// DOM要素の欠落時にもスクリプトが落ちないよう安全ガード付きで登録します
+Nodes.threadName && (Nodes.threadName.onclick = () => TD.reload());
+_doc.getElementById("autoReload") && (_doc.getElementById("autoReload").onclick = () => AutoReload.toggle());
+_doc.getElementById("autoScroll") && (_doc.getElementById("autoScroll").onclick = () => AutoScroll.toggle());
+_doc.getElementById("reloadMenu") && (_doc.getElementById("reloadMenu").onchange = () => ReloadThread());
+_doc.getElementById("goPrev") && (_doc.getElementById("goPrev").onclick = () => TD.movePage('prev'));
+_doc.getElementById("showAll") && (_doc.getElementById("showAll").onclick = () => TD.showAll());
+_doc.getElementById("writeTo") && (_doc.getElementById("writeTo").onclick = () => TD.writeTo());
+_doc.getElementById("find") && (_doc.getElementById("find").onclick = () => FindBox.show());
+
+Nodes.findBoxText && (Nodes.findBoxText.onfocus = () => Nodes.findBoxText.select());
+Nodes.findObject && (Nodes.findObject.onchange = () => FindBox.find());
+Nodes.findContent && (Nodes.findContent.onchange = () => FindBox.find());
+_doc.getElementById("showBar") && (_doc.getElementById("showBar").onclick = () => Titlebar.showBar());
+
+Nodes.statusText && (Nodes.statusText.onfocus = () => Nodes.statusText.select());
+Nodes.statusText && (Nodes.statusText.onclick = () => TD.scrollToNewRes());
+
 
 TD.run();
 //---- end of script ----

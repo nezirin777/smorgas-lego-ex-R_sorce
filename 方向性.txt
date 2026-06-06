@@ -1,83 +1,84 @@
 # Chaika スキンスクリプト リファクタリング方針
 
-## プロジェクト目的
+## 目的
 
-機能追加は行わない。
+本プロジェクトでは新機能追加は行わず、既存機能の整理と改善を目的とする。
 
-目的は以下。
+主な目標は以下の通り。
 
 - 可読性向上
 - 保守性向上
 - 軽量化
 - パフォーマンス改善
-- 現代Firefox向け最適化
-- script.js巨大化問題の解消
-- 将来的な修正容易化
+- 現代Firefox環境への最適化
+- script.js の肥大化解消
+- 将来的な修正・拡張の容易化
 
-既存利用者から見た挙動は可能な限り維持する。
+既存ユーザーから見た動作やUIは可能な限り維持する。
 
+---
 
 # 対象環境
 
-対象
+## サポート対象
 
 - Firefox 最新版
 - Floorp
 - Zen Browser
 - Waterfox
 
-対象外
+## サポート対象外
 
 - Firefox 52
-- Firefox ESR旧版
+- 旧Firefox ESR
 - Pale Moon
 - ES5環境
 
-これら旧環境向け互換コードは削除候補。
+これら旧環境向けの互換コードは削除候補とする。
 
+---
 
-# 現在の認識
+# 現状認識
 
-このコードは完全な旧式コードではない。
+本コードは完全なレガシーコードではなく、
 
-実際には
-
-- functionベース
-- namespaceベース
-- classベース
+- Functionベース
+- Namespaceベース
+- Classベース
 
 が混在している。
 
 例
 
-function AjaxGet()
+function AjaxGet() {}
 
-var Nodes = {}
+var Nodes = {};
 
 class StyleSheet {}
 
-つまり
+そのため、
 
-「全部Class化する」
+「全コードを一括Class化する」
 
-ではなく
+のではなく、
 
-「古い部分を段階的に整理しながらClass化する」
+「整理しながら段階的にClass化する」
 
 方針を採用する。
 
+---
 
 # 基本原則
 
-## 1. まず整理、次にClass化
+## 1. 整理を優先する
 
-禁止
+以下は禁止。
 
-- いきなり全面書き換え
+- 全面書き換え
 - 一括Class化
-- 一括ES化
+- 一括ES Modules化
 
-推奨
+推奨手順
 
 解析
 ↓
@@ -89,23 +90,24 @@ Class化
 ↓
 動作確認
 
+---
 
-## 2. 小さい単位で進める
+## 2. 小規模単位で進める
 
-毎回
+作業単位は
 
-1モジュール
-または
-1責務
+- 1モジュール
+- 1責務
 
-単位で作業する。
+を基本とする。
 
-大規模改修は禁止。
+大規模改修は避ける。
 
+---
 
 ## 3. 動作変更を避ける
 
-優先順位
+優先順位は以下。
 
 保守性
 ＞
@@ -113,12 +115,194 @@ Class化
 ＞
 見た目変更
 
-挙動変更は最後の手段。
+既存挙動の変更は最後の手段とする。
 
+---
+
+# 変数宣言ポリシー
+
+## 基本方針
+
+本リファクタリングでは、原則として var の使用を減らし、
+ローカルスコープでは const / let を使用する。
+
+ただし、トップレベル（グローバル）に公開される一部のマッピング変数については、
+互換性維持のため var を継続使用する。
+
+---
+
+## ローカル変数
+
+対象
+
+- 関数内部
+- メソッド内部
+- ブロックスコープ内
+- ループ変数
+
+方針
+
+- 再代入しない → const
+- 再代入する → let
+
+例
+
+const node = document.querySelector("#main");
+
+let count = 0;
+count++;
+
+---
+
+## グローバルマッピング変数
+
+対象例
+
+- Analyse
+- SoundUnit
+- Clipboard
+- Punycode
+- Nodes
+- ResNodes
+
+方針
+
+互換性維持のため var を維持する。
+
+例
+
+var SoundUnit = {};
+var Clipboard = {};
+
+---
+
+## var を維持する理由
+
+### 1. window への自動アタッチ
+
+トップレベル変数は宣言方法によって挙動が異なる。
+
+var
+
+var SoundUnit = {};
+
+↓
+
+window.SoundUnit
+
+として参照可能。
+
+const / let
+
+const SoundUnit = {};
+
+↓
+
+グローバルスコープからは参照できるが、
+
+window.SoundUnit
+
+は undefined となる。
+
+Chaika本体や関連スクリプトが
+
+window.SoundUnit
+window.Clipboard
+
+などの形式で参照している可能性があるため、
+機械的な const 化は行わない。
+
+---
+
+### 2. 再ロード時の安全性
+
+const は同一コンテキストで再宣言されると即座に例外となる。
+
+const SoundUnit = {};
+const SoundUnit = {};
+
+↓
+
+SyntaxError:
+Identifier 'SoundUnit' has already been declared
+
+一方 var は再宣言が許容される。
+
+var SoundUnit = {};
+var SoundUnit = {};
+
+↓
+
+エラーにならない。
+
+Chaika のようなアドオン環境では、
+
+- スクリプト再読み込み
+- 多重ロード
+- 旧コードとの共存
+
+が発生する可能性があるため、
+トップレベルでは var の方が安全である。
+
+---
+
+### 3. 過去の修正履歴との整合性
+
+CHANGELOG.md には以下の履歴が残っている。
+
+「トップレベルのconstをvarに書き換えました」
+
+これは過去に実際に発生した
+
+- ロードエラー
+- 名前衝突
+- 実行コンテキスト問題
+
+への対処として行われた修正であり、
+リファクタリング時も尊重する。
+
+---
+
+## 適用ルール
+
+○ 変換する
+
+var node = ...
+↓
+const node = ...
+
+var i = ...
+↓
+let i = ...
+
+○ 維持する
+
+var Analyse = {};
+var SoundUnit = {};
+var Clipboard = {};
+var Punycode = {};
+var Nodes = {};
+var ResNodes = {};
+
+---
+
+## 結論
+
+本プロジェクトでは
+
+- ローカル変数 → const / let
+- グローバル公開マッピング → var
+
+を正式方針とする。
+
+単純な「var撲滅」は行わず、
+実行環境との互換性を優先する。
+
+---
 
 # Class化方針
 
-## 状態を持つもの
+## 状態を持つオブジェクト
 
 現状
 
@@ -136,15 +320,16 @@ class Bookmark {
         this._data = {};
     }
 
-    save(){}
+    save() {}
 
-    load(){}
+    load() {}
 }
 
 const bookmark = new Bookmark();
 
+---
 
-## 状態を持たないもの
+## 状態を持たないユーティリティ
 
 現状
 
@@ -157,72 +342,73 @@ var UrlUtil = {
 
 class UrlUtil {
 
-    static normalize(){}
+    static normalize() {}
 
-    static encode(){}
+    static encode() {}
 
 }
 
+---
 
-# DOM方針
+# DOM管理方針
 
-現在のコードには
+現在は以下の独自管理層が存在する。
 
 - _doc
 - Nodes
 - ResNodes
 
-など独自管理層が存在する。
+これらは依存範囲が広いため、初期段階では触らない。
 
-これらは全体への影響が大きいため後回し。
+まず利用側の整理を優先し、
 
-まずは利用側を整理する。
+Nodes / ResNodes の見直しは後半フェーズで実施する。
 
-Nodes/ResNodesの改修は後半で実施する。
+---
 
+# リファクタリング工程
 
-# 優先順位
+## Phase 1：現状把握
 
-## Phase1 現状把握
+対象コードについて以下を整理する。
 
-対象コードの責務確認
+- 役割（責務）
+- 呼び出し元
+- 依存関係
 
-- 何を担当しているか
-- 誰が呼んでいるか
-- 何に依存しているか
+---
 
-を整理する。
+## Phase 2：安全な整理
 
+実施内容
 
-## Phase2 安全な整理
-
-対象
-
-- const/let化
+- const / let化
 - 未使用変数削除
 - 未使用関数削除
 - 重複処理削除
-- 古い互換コード削除
+- 旧互換コード削除
 - 不要なDOM取得削除
 
 目的
 
-- サイズ削減
+- コード量削減
 - 可読性向上
 
+---
 
-## Phase3 小規模Class化
+## Phase 3：小規模Class化
 
-優先
+優先対象
 
 1. AjaxGet
 2. StyleSheet周辺
 3. 小規模ユーティリティ
 
-ここでClass化のルールを固める。
+ここでClass化のルールを確立する。
 
+---
 
-## Phase4 Popup系整理
+## Phase 4：Popup系整理
 
 対象
 
@@ -237,14 +423,13 @@ Nodes/ResNodesの改修は後半で実施する。
 
 目標
 
-共通基底クラス
+class PopupBase {}
 
-class PopupBase
+を導入し、共通処理を集約する。
 
-を導入する。
+---
 
-
-## Phase5 UI系整理
+## Phase 5：UI系整理
 
 対象
 
@@ -255,12 +440,11 @@ class PopupBase
 - FindBox
 - PageScroller
 
-など
+主に責務整理とClass化を行う。
 
-Class化と責務整理を行う。
+---
 
-
-## Phase6 Thread系整理
+## Phase 6：Thread系整理
 
 対象
 
@@ -271,23 +455,20 @@ Class化と責務整理を行う。
 - ResNumber
 - ResImage
 
-依存が多いため後回し。
+依存関係が多いため後回しとする。
 
+---
 
-## Phase7 Nodes/ResNodes整理
+## Phase 7：Nodes / ResNodes整理
 
 対象
 
 - Nodes
 - ResNodes
 
-理由
+全体への影響が非常に大きいため慎重に進める。
 
-全体への影響が非常に大きい。
-
-後半で慎重に実施する。
-
-必要であれば
+必要に応じて
 
 var Nodes
 
@@ -295,47 +476,39 @@ var Nodes
 
 class NodesManager
 
-への移行も検討。
+への移行も検討する。
 
+---
 
-## Phase8 ファイル分割
+## Phase 8：ファイル分割
 
-最終目標
-
-core/
-popup/
-thread/
-ui/
-util/
-
-へ責務ごとに分割。
-
-例
+最終目標は責務ごとの分離。
 
 core/
- ├ AjaxGet.js
- ├ StyleSheet.js
+├ AjaxGet.js
+├ StyleSheet.js
 
 popup/
- ├ PopupBase.js
- ├ UrlPopup.js
- ├ ImagePopup.js
+├ PopupBase.js
+├ UrlPopup.js
+├ ImagePopup.js
 
 ui/
- ├ Bookmark.js
- ├ AutoReload.js
+├ Bookmark.js
+├ AutoReload.js
 
 thread/
- ├ ThreadDocument.js
+├ ThreadDocument.js
 
 util/
- ├ Clipboard.js
- ├ ReplaceStr.js
+├ Clipboard.js
+├ ReplaceStr.js
 
+---
 
 # レビュー時の重点確認項目
 
-毎回確認するもの
+毎回以下を確認する。
 
 - 古いFirefox向けコード
 - Pale Moon向けコード
@@ -350,417 +523,30 @@ util/
 - 未使用コード
 - 重複コード
 
+---
 
-# 作業手順
+# 標準作業フロー
 
-毎回必ず
+各モジュールごとに必ず以下の順序で進める。
 
 1. 現状コード確認
 2. 責務整理
 3. 依存関係確認
 4. 問題点抽出
-5. 最小修正版提示
+5. 最小修正版作成
 6. 差分説明
 7. 動作確認
-8. Class化案提示
+8. Class化案作成
 9. 差分説明
 10. 動作確認
 
-の順で進める。
+---
 
+# 着手順序
 
-# 現時点での着手順
+script.js を上から順に確認する。
 
-script.jsを上から順に確認する。
-
-予定順
-
-1. AjaxGet
-2. StyleSheet
-3. 小規模ユーティリティ
-4. Popup系
-5. UI系
-6. Thread系
-7. Nodes
-8. ResNodes
-9. ファイル分割
-
-この順序を基本方針とする。# Chaika スキンスクリプト リファクタリング方針
-
-## プロジェクト目的
-
-機能追加は行わない。
-
-目的は以下。
-
-- 可読性向上
-- 保守性向上
-- 軽量化
-- パフォーマンス改善
-- 現代Firefox向け最適化
-- script.js巨大化問題の解消
-- 将来的な修正容易化
-
-既存利用者から見た挙動は可能な限り維持する。
-
-
-# 対象環境
-
-対象
-
-- Firefox 最新版
-- Floorp
-- Zen Browser
-- Waterfox
-
-対象外
-
-- Firefox 52
-- Firefox ESR旧版
-- Pale Moon
-- ES5環境
-
-これら旧環境向け互換コードは削除候補。
-
-
-# 現在の認識
-
-このコードは完全な旧式コードではない。
-
-実際には
-
-- functionベース
-- namespaceベース
-- classベース
-
-が混在している。
-
-例
-
-function AjaxGet()
-
-var Nodes = {}
-
-class StyleSheet {}
-
-つまり
-
-「全部Class化する」
-
-ではなく
-
-「古い部分を段階的に整理しながらClass化する」
-
-方針を採用する。
-
-
-# 基本原則
-
-## 1. まず整理、次にClass化
-
-禁止
-
-- いきなり全面書き換え
-- 一括Class化
-- 一括ES化
-
-推奨
-
-解析
-↓
-最小修正
-↓
-動作確認
-↓
-Class化
-↓
-動作確認
-
-
-## 2. 小さい単位で進める
-
-毎回
-
-1モジュール
-または
-1責務
-
-単位で作業する。
-
-大規模改修は禁止。
-
-
-## 3. 動作変更を避ける
-
-優先順位
-
-保守性
-＞
-軽量化
-＞
-見た目変更
-
-挙動変更は最後の手段。
-
-
-# Class化方針
-
-## 状態を持つもの
-
-現状
-
-var Bookmark = {
-    _data: {},
-    save(){},
-    load(){}
-};
-
-↓
-
-class Bookmark {
-
-    constructor() {
-        this._data = {};
-    }
-
-    save(){}
-
-    load(){}
-}
-
-const bookmark = new Bookmark();
-
-
-## 状態を持たないもの
-
-現状
-
-var UrlUtil = {
-    normalize(){},
-    encode(){}
-};
-
-↓
-
-class UrlUtil {
-
-    static normalize(){}
-
-    static encode(){}
-
-}
-
-
-# DOM方針
-
-現在のコードには
-
-- _doc
-- Nodes
-- ResNodes
-
-など独自管理層が存在する。
-
-これらは全体への影響が大きいため後回し。
-
-まずは利用側を整理する。
-
-Nodes/ResNodesの改修は後半で実施する。
-
-
-# 優先順位
-
-## Phase1 現状把握
-
-対象コードの責務確認
-
-- 何を担当しているか
-- 誰が呼んでいるか
-- 何に依存しているか
-
-を整理する。
-
-
-## Phase2 安全な整理
-
-対象
-
-- const/let化
-- 未使用変数削除
-- 未使用関数削除
-- 重複処理削除
-- 古い互換コード削除
-- 不要なDOM取得削除
-
-目的
-
-- サイズ削減
-- 可読性向上
-
-
-## Phase3 小規模Class化
-
-優先
-
-1. AjaxGet
-2. StyleSheet周辺
-3. 小規模ユーティリティ
-
-ここでClass化のルールを固める。
-
-
-## Phase4 Popup系整理
-
-対象
-
-- Popup
-- ResPopup
-- IDPopup
-- NamePopup
-- TrackbackPopup
-- UrlPopup
-- ImagePopup
-- VideoPopup
-
-目標
-
-共通基底クラス
-
-class PopupBase
-
-を導入する。
-
-
-## Phase5 UI系整理
-
-対象
-
-- Bookmark
-- AutoReload
-- Digest
-- AutoScroll
-- FindBox
-- PageScroller
-
-など
-
-Class化と責務整理を行う。
-
-
-## Phase6 Thread系整理
-
-対象
-
-- ThreadDocument
-- Name
-- ID
-- Trackback
-- ResNumber
-- ResImage
-
-依存が多いため後回し。
-
-
-## Phase7 Nodes/ResNodes整理
-
-対象
-
-- Nodes
-- ResNodes
-
-理由
-
-全体への影響が非常に大きい。
-
-後半で慎重に実施する。
-
-必要であれば
-
-var Nodes
-
-↓
-
-class NodesManager
-
-への移行も検討。
-
-
-## Phase8 ファイル分割
-
-最終目標
-
-core/
-popup/
-thread/
-ui/
-util/
-
-へ責務ごとに分割。
-
-例
-
-core/
- ├ AjaxGet.js
- ├ StyleSheet.js
-
-popup/
- ├ PopupBase.js
- ├ UrlPopup.js
- ├ ImagePopup.js
-
-ui/
- ├ Bookmark.js
- ├ AutoReload.js
-
-thread/
- ├ ThreadDocument.js
-
-util/
- ├ Clipboard.js
- ├ ReplaceStr.js
-
-
-# レビュー時の重点確認項目
-
-毎回確認するもの
-
-- 古いFirefox向けコード
-- Pale Moon向けコード
-- querySelector重複
-- querySelectorAll乱用
-- setTimeout乱用
-- setInterval乱用
-- 不要なDOM再検索
-- グローバル依存
-- namespace肥大化
-- 責務混在
-- 未使用コード
-- 重複コード
-
-
-# 作業手順
-
-毎回必ず
-
-1. 現状コード確認
-2. 責務整理
-3. 依存関係確認
-4. 問題点抽出
-5. 最小修正版提示
-6. 差分説明
-7. 動作確認
-8. Class化案提示
-9. 差分説明
-10. 動作確認
-
-の順で進める。
-
-
-# 現時点での着手順
-
-script.jsを上から順に確認する。
-
-予定順
+優先順位は以下。
 
 1. AjaxGet
 2. StyleSheet
