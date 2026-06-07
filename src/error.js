@@ -18,12 +18,12 @@ class ErrorPageRenderer {
 		 * ドキュメントの head 要素
 		 * @type {Element|null}
 		 */
-		this.head = document.head || document.getElementsByTagName("head")[0] || null;
+		this.head = document.head || null;
 		/**
 		 * ドキュメントの body 要素
 		 * @type {Element|null}
 		 */
-		this.body = document.body || document.getElementsByTagName("body")[0] || null;
+		this.body = document.body || null;
 	}
 
 	/**
@@ -87,7 +87,8 @@ class ErrorPageRenderer {
 		errMsg.id = "errorMessage";
 		errInfo.appendChild(errMsg);
 
-		const matchUrl = /.+\/thread\/((http:\/\/[\w\.]+)\/test\/read.cgi\/([\w\.]+)\/[\d]+)\/?/.exec(location.href);
+		// https にも完全対応するための正規表現調整 (キャプチャ位置は変更なし)
+		const matchUrl = /.+\/thread\/((https?:\/\/[\w\.]+)\/test\/read.cgi\/([\w\.]+)\/[\d]+)\/?/.exec(location.href);
 
 		switch (this.ft.getAttribute("status")) {
 			case "( ｰωｰ)「DAT 落ち」":
@@ -134,5 +135,6 @@ class ErrorPageRenderer {
 }
 
 // レンダリング実行
-const renderer = new ErrorPageRenderer();
+// 再ロード時の SyntaxError 防止、および window 自動アタッチ維持のため var を使用
+var renderer = new ErrorPageRenderer();
 renderer.render();

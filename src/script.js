@@ -1,12 +1,12 @@
 ﻿/**
- * @file メインのスクリプトです。
+ * @file メインのスクリプトです。 (Firefox ESR 140+ 特化版 - Part 1)
  * @author EarlgreyTea
  */
 "use strict";
 
 /**
  * グローバルオブジェクト documentの短縮エイリアス
- * @type {element}
+ * @type {Document}
  */
 var _doc = document;
 
@@ -19,7 +19,7 @@ var _doc = document;
  */
 function AjaxGet(url, force){
 	const options = {};
-	if(typeof force !== "undefined" && force){
+	if(force){
 		options.headers = {
 			"If-Modified-Since": "Wed, 15 Nov 1995 00:00:00 GMT"
 		};
@@ -30,7 +30,6 @@ function AjaxGet(url, force){
 			if(!response.ok){
 				throw new Error(response.statusText || `HTTP error! status: ${response.status}`);
 			}
-			// バイナリデータとして一度取得する
 			return response.arrayBuffer().then(buffer => {
 				let charset = "utf-8"; // デフォルトはUTF-8
 
@@ -43,24 +42,24 @@ function AjaxGet(url, force){
 					}
 				}
 
-				// 2. ヘッダーに明示的な指定がない場合、リクエストURLから判定する
-				// ローカルの静的アセット（.txt, .json, .js, .css, .html）以外は、
-				// chaikaサーバーの動的コンテンツ（Shift_JIS）とみなして処理する
+				// 2. ヘッダーに明示的な指定がない場合、標準の URL API で解析
+				// ローカルの静的アセット以外は、chaikaサーバーの Shift_JIS コンテンツとみなす
 				if(charset.toLowerCase() === "utf-8" || charset.toLowerCase() === "utf-8;"){
-					const isLocalAsset = /\.(txt|json|js|css|html)(\?.*)?$/i.test(url);
+					const parsedUrl = new URL(url, location.href);
+					const isLocalAsset = /\.(txt|json|js|css|html)$/i.test(parsedUrl.pathname);
 					if(!isLocalAsset){
 						charset = "Shift_JIS";
 					}
 				}
 
-				// 判別した文字コードでデコードを実行する
+				// 判別した文字コードでデコードを実行
 				const decoder = new TextDecoder(charset);
 				return decoder.decode(buffer);
 			});
 		});
 }
 
-// ダイアログ
+// ダイアロググローバルマッピング
 var OptionsDialog = null;
 var AnalyseDialog = null;
 
@@ -69,6 +68,9 @@ var AnalyseDialog = null;
  */
 // eslint-disable-next-line no-redeclare
 class StyleSheet {
+	// インスタンスとIDを安全に紐付けるクラス固有のプライベートMap
+	static _sheetsMap = new Map();
+
 	/**
 	 * 指定IDのスタイルシートを取得または作成します。
 	 * @param {string}	id	スタイルシートのID
@@ -76,15 +78,19 @@ class StyleSheet {
 	constructor(id){
 		this._id = id;
 		this._sheet = new CSSStyleSheet();
-		// 重複登録を避けてドキュメントにアタッチ
-		document.adoptedStyleSheets = [...document.adoptedStyleSheets.filter(s => s._id !== id), this._sheet];
-		this._sheet._id = id; // 識別用プロパティをアタッチ
+
+		// 重複登録（同一IDの既存シート）を安全に避けてアタッチ
+		const filtered = document.adoptedStyleSheets.filter(s => StyleSheet._sheetsMap.get(s) !== id);
+		document.adoptedStyleSheets = [...filtered, this._sheet];
+
+		StyleSheet._sheetsMap.set(this._sheet, id);
 	}
 	/**
 	 * スタイルシートを削除します。
 	 */
 	remove(){
 		document.adoptedStyleSheets = document.adoptedStyleSheets.filter(s => s !== this._sheet);
+		StyleSheet._sheetsMap.delete(this._sheet);
 	}
 	/**
 	 * スタイルルールを挿入します。
@@ -233,10 +239,10 @@ class NodesManager {
 	 */
 	get newMark(){ return _doc.getElementById("NewMark"); }
 	/**
-	 * スレッド表示のルート
+	 * スレッド表示のルート (Null合体代入演算子を使用)
 	 * @type {Element}
 	 */
-	get content(){ return (!this._content) ? (this._content = _doc.getElementById("content")) : this._content; }
+	get content(){ return this._content ??= _doc.getElementById("content"); }
 	/**
 	 * ポップアップ表示のルート
 	 * @type {Element}
@@ -253,73 +259,73 @@ class NodesManager {
 	 * @param {Element}		node	レス要素
 	 * @return {Element}	レスヘッダ要素
 	 */
-	getResHeader(node){ return node?.children[0] || null; }
+	getResHeader(node){ return node?.children[0] ?? null; }
 	/**
 	 * 指定のレス要素内のレス本文要素を取得します。
 	 * @param {Element}		node	レス要素
 	 * @return {Element}	レス本文要素
 	 */
-	getResBody(node){ return node?.children[1] || null; }
+	getResBody(node){ return node?.children[1] ?? null; }
 	/**
 	 * 指定のレス要素内の名前欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	名前欄要素
 	 */
-	getResName(resHeader){ return resHeader?.children[1] || null; }
+	getResName(resHeader){ return resHeader?.children[1] ?? null; }
 	/**
 	 * 指定のレス要素内のメール欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	メール欄要素
 	 */
-	getResMail(resHeader){ return resHeader?.children[2] || null; }
+	getResMail(resHeader){ return resHeader?.children[2] ?? null; }
 	/**
 	 * 指定のレス要素内の日付欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	日付欄要素
 	 */
-	getResDate(resHeader){ return resHeader?.children[3] || null; }
+	getResDate(resHeader){ return resHeader?.children[3] ?? null; }
 	/**
 	 * 指定のレス要素内のID欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	ID欄要素
 	 */
-	getResID(resHeader){ return resHeader?.children[4] || null; }
+	getResID(resHeader){ return resHeader?.children[4] ?? null; }
 	/**
 	 * 指定のレス要素内のBeID欄要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	BeID欄要素
 	 */
-	getResBeID(resHeader){ return resHeader?.children[5] || null; }
+	getResBeID(resHeader){ return resHeader?.children[5] ?? null; }
 	/**
 	 * 指定のレス要素内のIDアイコン要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	IDアイコン要素
 	 */
-	getResIDIcon(resHeader){ return resHeader?.children[6] || null; }
+	getResIDIcon(resHeader){ return resHeader?.children[6] ?? null; }
 	/**
 	 * 指定のレス要素内のあぼーん表示要素を取得します。
 	 * @param {Element}		resHeader	レスヘッダ部要素
 	 * @return {Element}	あぼーん表示要素
 	 */
-	getInfoAbone(resHeader){ return resHeader?.children[7] || null; }
+	getInfoAbone(resHeader){ return resHeader?.children[7] ?? null; }
 	/**
 	 * レス要素から、レス番号を取得します。
 	 * @param {Element} node	レス要素
 	 * @return {number} レス番号
 	 */
-	getResNumByContainer(node){ return node ? parseInt(node.getAttribute("res"), 10) : 0; }
+	getResNumByContainer(node){ return parseInt(node?.getAttribute("res") ?? "0", 10) || 0; }
 	/**
 	 * ID要素からレス番号を取得します。
 	 * @param {Element} node	ID要素
 	 * @return {number} レス番号
 	 */
-	getResNumByID(node){ return node ? parseInt(node.parentNode.parentNode.getAttribute("res"), 10) : 0; }
+	getResNumByID(node){ return parseInt(node?.parentNode?.parentNode?.getAttribute("res") ?? "0", 10) || 0; }
 	/**
 	 * 名前要素からレス番号を取得します。
 	 * @param {Element} node	名前要素
 	 * @return {number} レス番号
 	 */
-	getResNumByName(node){ return node ? parseInt(node.parentNode.parentNode.getAttribute("res"), 10) : 0; }
+	getResNumByName(node){ return parseInt(node?.parentNode?.parentNode?.getAttribute("res") ?? "0", 10) || 0; }
 }
 // グローバル変数名へのマッピング
 var Nodes = new NodesManager();
@@ -397,95 +403,95 @@ class ResNodesManager {
 	}
 
 	// ------------------------------------------------------------------
-	// 以下、node引数（個別ポップアップ解析等）がない場合は、
-	// メモリ上のキャッシュから一瞬でレスの要素配列を返します。
+	// 以下、メモリ上のキャッシュから一瞬でレスの要素配列をスプレッド構文で展開して返します。
 	// ------------------------------------------------------------------
 
 	getContainers(node, selected){
 		if(selected) {
-			return Array.from((node || Nodes.content).querySelectorAll(".resSelected"));
+			return [...(node || Nodes.content).querySelectorAll(".resSelected")];
 		}
 		if(!node && this._containers) return this._containers;
-		let elems = Array.from((node || Nodes.content).querySelectorAll(".resContainer"));
-		const result = (elems && elems.length > 0) ? elems : (Array.from((node || Nodes.popupRoot).getElementsByClassName("resPopup")) || []);
+		const root = node || Nodes.content;
+		const elems = [...root.querySelectorAll(".resContainer")];
+		const result = (elems.length > 0) ? elems : [...(node || Nodes.popupRoot).getElementsByClassName("resPopup")];
 		if(!node) this._containers = result;
 		return result;
 	}
 	getHeaders(node){
 		if (!node && this._headers) return this._headers;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resHeader")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resHeader")];
 		if (!node) this._headers = result;
 		return result;
 	}
 	getNewHeaders(node){
 		if (!node && this._newHeaders) return this._newHeaders;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resNewHeader")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resNewHeader")];
 		if (!node) this._newHeaders = result;
 		return result;
 	}
 	getNumbers(node){
 		if (!node && this._numbers) return this._numbers;
-		const result = Array.from((node || Nodes.content).querySelectorAll(".resNumber > a")) || [];
+		const result = [...(node || Nodes.content).querySelectorAll(".resNumber > a")];
 		if (!node) this._numbers = result;
 		return result;
 	}
 	getNames(node){
 		if (!node && this._names) return this._names;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resName")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resName")];
 		if (!node) this._names = result;
 		return result;
 	}
 	getMails(node){
 		if (!node && this._mails) return this._mails;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resMail")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resMail")];
 		if (!node) this._mails = result;
 		return result;
 	}
 	getDates(node){
 		if (!node && this._dates) return this._dates;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resDate")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resDate")];
 		if (!node) this._dates = result;
 		return result;
 	}
 	getIDs(node){
 		if (!node && this._ids) return this._ids;
-		const result = Array.from((node || Nodes.content).querySelectorAll(".resContainer .resID[rel]")) || [];
+		const result = [...(node || Nodes.content).querySelectorAll(".resContainer .resID[rel]")];
 		if (!node) this._ids = result;
 		return result;
 	}
 	getBeIDs(node){
 		if (!node && this._beids) return this._beids;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resBeID")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resBeID")];
 		if (!node) this._beids = result;
 		return result;
 	}
 	getInfoAbones(node){
 		if (!node && this._infoAbones) return this._infoAbones;
-		const result = Array.from((node || Nodes.content).querySelectorAll(".resContainer[aboned='true'] .resInfoAbone")) || [];
+		const result = [...(node || Nodes.content).querySelectorAll(".resContainer[aboned='true'] .resInfoAbone")];
 		if (!node) this._infoAbones = result;
 		return result;
 	}
 	getBodies(node){
 		if (!node && this._bodies) return this._bodies;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resBody")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resBody")];
 		if (!node) this._bodies = result;
 		return result;
 	}
 	getResAnchors(node){
 		if (!node && this._resAnchors) return this._resAnchors;
-		const result = Array.from((node || Nodes.content).querySelectorAll(".resBody .resPointer")) || [];
+		const result = [...(node || Nodes.content).querySelectorAll(".resBody .resPointer")];
 		if (!node) this._resAnchors = result;
 		return result;
 	}
 	getResMesIDs(node){
 		if (!node && this._resMesIds) return this._resMesIds;
-		const result = Array.from((node || Nodes.content).getElementsByClassName("resMesID")) || [];
+		const result = [...(node || Nodes.content).getElementsByClassName("resMesID")];
 		if (!node) this._resMesIds = result;
 		return result;
 	}
 	getOutLinks(node){
 		if (!node && this._outLinks) return this._outLinks;
-		const result = Array.from((node || Nodes.content).querySelectorAll(".resBody .outLink, .ivurLink, .ivurBlockedLink"));
+		const result = [...(node || Nodes.content).querySelectorAll(".resBody .outLink, .ivurLink, .ivurBlockedLink")];
 		if (!node) this._outLinks = result;
 		return result;
 	}
@@ -541,10 +547,10 @@ class ResNodesManager {
 		return this.getNames(node)[0]?.textContent || "";
 	}
 	getMailText(node){
-		return (this.getMails(node)[0]?.textContent || "").replace(/^ | $/g, "");
+		return (this.getMails(node)[0]?.textContent || "").trim();
 	}
 	getDateText(node){
-		return (this.getDates(node)[0]?.textContent || "").replace(/^ | $/g, "");
+		return (this.getDates(node)[0]?.textContent || "").trim();
 	}
 	getIDText(node){
 		return (this.getIDs(node)[0]?.textContent || "").replace(/^ *(ID:[^ ]*).*/, "$1");
@@ -553,7 +559,7 @@ class ResNodesManager {
 		return (this.getBeIDs(node)[0]?.textContent || "").replace(/^ *([^ ]*).*/, "$1");
 	}
 	getBodyText(node){
-		return ThreadDocument.getInnerText(this.getBodies(node)[0], false).replace(/ \n /g, "\n").replace(/^ | $/g, "") + "\n";
+		return ThreadDocument.getInnerText(this.getBodies(node)[0], false).replace(/ \n /g, "\n").trim() + "\n";
 	}
 }
 // グローバル変数名へのマッピング
@@ -704,12 +710,13 @@ class ThreadDocumentManager {
 			Nodes.boardName.textContent = Board.getName(this.boardUrl) || "";
 		}
 
-		const boardHost = this.boardUrl.replace(/^https?:\/\/([^\/]+)\/.+$/, "$1");
+		// 標準の URL API を用いて安全かつ正確にホスト名をパース
+		const boardHost = new URL(this.boardUrl).hostname;
 		_doc.body.setAttribute("host", boardHost);
 		if(SkinPref.get("enableFavicon")){
 			const boardStyle = Nodes.boardName.style;
 			boardStyle.paddingLeft = '19px';
-			boardStyle.background = 'url(http://www.google.com/s2/favicons?domain=' + boardHost + ') no-repeat left center';
+			boardStyle.background = 'url(https://www.google.com/s2/favicons?domain=' + boardHost + ') no-repeat left center';
 		}
 
 		ThreadNameContextMenu.init();
@@ -813,7 +820,7 @@ class ThreadDocumentManager {
 		this.log.info(fn);
 		const nodes = node.childNodes;
 		const ret = [];
-		Array.from(nodes).forEach((n) => {
+		[...nodes].forEach((n) => {
 			if(n.hasChildNodes()){
 				ret.push(this.getInnerText(n, false));
 			}else if(n.tagName === "BR"){
@@ -1129,7 +1136,7 @@ class ThreadDocumentManager {
 		MyAndRep.scanMyPostAndReply();
 	}
 
-  /**
+	/**
 	 * XMLHttpRequest を利用して、動的にレスを挿入します。
 	 */
 	asyncInsert(start, end, before, scrollToTop, func, noUpdate, noScroll){
@@ -1182,6 +1189,10 @@ class ThreadDocumentManager {
 		})
 		.catch((e) => {
 			this.log.err(fn + ":" + e.message);
+			// 通信エラー発生時、インジケータ（Throbber）を確実に解除
+			Nodes.statusText.className = "error";
+			this.status = `(´・ω・\`)「エラー : ${e.message}」`;
+			this.setStatus(true);
 		});
 	}
 
@@ -1205,7 +1216,7 @@ class ThreadDocumentManager {
 		if(endIndex < this.countAll) this.asyncInsert(endIndex + 1, this.countAll, false, true);
 	}
 
-  /**
+	/**
 	 * 更新をチェックし新着レスがあれば挿入します。
 	 */
 	reload(noScroll, background){
@@ -1286,6 +1297,10 @@ class ThreadDocumentManager {
 		})
 		.catch((e) => {
 			this.log.err(fn + ":" + e.message);
+			// 通信エラー発生時、インジケータ（Throbber）を確実に解除
+			Nodes.statusText.className = "error";
+			this.status = `(´・ω・\`)「エラー : ${e.message}」`;
+			this.setStatus(true);
 		});
 	}
 
@@ -1312,7 +1327,7 @@ class ThreadDocumentManager {
 	/**
 	 * 改ページ処理を行います。
 	 */
-  movePage(type){
+	movePage(type){
 		const fn = "movePage(" + type + ")";
 		this.log.info(fn);
 		const ridx = SkinPref.get("valueReadBandWidth");
@@ -1333,7 +1348,7 @@ class ThreadDocumentManager {
 				psn = pen - range + 1;
 			}
 			break;
-		case "next": { // ブロックスコープを作成
+		case "next": {
 			const matchNextRange2 = this.option.match(/^(\d{1,4})\-(\d{1,4})(n)?(#res\d{1,4})?$/);
 			const matchNextRange1 = this.option.match(/^(\d{1,4})(\-)?(n)?(#res\d{1,4})?$/);
 			const matchNextLatest = this.option.match(/^l(\d{1,4})(n)?$/);
@@ -1349,7 +1364,7 @@ class ThreadDocumentManager {
 				psn = pen - range + 1;
 			}
 			break;
-		} // ブロックスコープの終了
+		}
 		}
 
 		if(psn < 1){
@@ -1383,7 +1398,7 @@ var TD = ThreadDocument; // エイリアスマッピング
  * 名前を走査して、レス番号と名前の対応テーブルを管理するクラス
  */
 class NameManager {
-	constructor() {
+  constructor() {
 		this.log = new SkinLog("Name", SkinLogLvl.WARNING);
 		this.items = [];
 		this.count = null;
@@ -1418,7 +1433,7 @@ class NameManager {
 	scanResSys(){
 		const isDivide = this._isDivide;
 		this.slipItems = [];
-		Array.from(Nodes.content.querySelectorAll('.resName .resSystem')).forEach((elem) => {
+		[...Nodes.content.querySelectorAll('.resName .resSystem')].forEach((elem) => {
 			let html = elem.innerHTML;
 			const matchv6 = html.match(/^\((\S+) (\S{4})-(\S{4}) \[(\S+)( \[上級国民\])?\]\)$/);
 			const matchv5 = html.match(/^\((\S+) (\S{4})-(\S{4})\)$/);
@@ -1483,7 +1498,7 @@ class NameManager {
 		});
 
 		if(isDivide){
-			Array.from(Nodes.content.querySelectorAll('.slipAB,.slipIP')).forEach((slip) => {
+			[...Nodes.content.querySelectorAll('.slipAB,.slipIP')].forEach((slip) => {
 				const name = (slip.className === "slipAB") ? (slip.textContent + "-") : slip.textContent;
 				this.add(this.slipItems, name, slip);
 			});
@@ -1959,8 +1974,6 @@ class ResNumberManager {
 // グローバル変数名へのマッピング
 var ResNumber = new ResNumberManager();
 
-
-
 /**
  * 画像・動画のインライン表示を管理するクラス
  */
@@ -2194,7 +2207,7 @@ class ResImageManager {
 		}
 
 		const middleOffset = _doc.body.scrollTop + _doc.body.clientHeight / 2 - window.pageYOffset;
-		this.imageList = Array.from(_doc.querySelectorAll(sel)).sort((a, b) => {
+		this.imageList = [..._doc.querySelectorAll(sel)].sort((a, b) => {
 			return Math.abs((a.getBoundingClientRect()).top - middleOffset) -
 			       Math.abs((b.getBoundingClientRect()).top - middleOffset);
 		});
@@ -2708,8 +2721,15 @@ class FindBoxManager {
 		const y = window.scrollY;
 		const strong = _doc.createElement("strong");
 		while(window.find(str)){
-			const range = window.getSelection().getRangeAt(0);
-			range.surroundContents(strong.cloneNode(false));
+			try {
+				const range = window.getSelection().getRangeAt(0);
+				range.surroundContents(strong.cloneNode(false));
+			} catch (e) {
+				console.warn("FindBox: surroundContents failed:", e);
+				// DOM分割例外等の無限ループを避けるための安全な選択解除
+				window.getSelection().removeAllRanges();
+				break;
+			}
 		}
 		window.getSelection().removeAllRanges();
 		window.scrollTo(x, y);
@@ -3443,7 +3463,7 @@ class PageScrollerManager {
 		const top = window.pageYOffset + (Nodes.header.offsetTop + Nodes.header.offsetHeight);
 		for(let i = resItems.length - 1; i >= 0 ; --i){
 			const resTop = resItems[i];
-			if(TD.isShow(resTop) && (resTop.offsetTop < top - 2)){ // 微小な位置判定の誤差を吸収
+			if(TD.isShow(resTop) && (resTop.offsetTop < top - 2)){
 				const targetY = resTop.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
 				window.scrollTo({
 					top: targetY,
@@ -3885,7 +3905,7 @@ class MyAndRepManager {
 		this.repcolor = SkinPref.get("stringReplyBgColor");
 		this.isMyPost = SkinPref.get("enableHighlightMyPost");
 		this.isReply = SkinPref.get("enableHighlightReply");
-		this.isNotify = SkinPref.get("enableNotifyReply"); // enableNotifyReplayのタイポ修正反映
+		this.isNotify = SkinPref.get("enableNotifyReply");
 	}
 	/**
 	 * 処理を再度行って表示を更新します。
@@ -4207,7 +4227,7 @@ class PopupManager {
 	 */
 	handleEvent(e){
 		switch(e.type){
-		case "mouseout": // falls through
+		case "mouseout":
 		case "mousemove":
 			this.remove(e);
 		}
@@ -4368,7 +4388,7 @@ class ResPopupManager extends PopupBase {
 		super("ResPopup");
 	}
 	/**
-	 * イベントリスナを登録します。（漏れていたメソッドを追加）
+	 * イベントリスナを登録します。
 	 */
 	startup(){
 		window.addEventListener("mouseover", this, false);
@@ -5093,9 +5113,9 @@ class UrlPopupManager extends PopupBase {
 		const img = _doc.createElement("img");
 		let src;
 		if(SkinPref.get("valueThumbnailSite") === 1){
-			src = "http://img.simpleapi.net/small/" + href;
+			src = "https://img.simpleapi.net/small/" + href;
 		}else{
-			src = "http://capture.heartrails.com/" + (SkinPref.get("valueUrlPopupSize") === 0 ? "large" : "small") + "?" + href;
+			src = "https://capture.heartrails.com/" + (SkinPref.get("valueUrlPopupSize") === 0 ? "large" : "small") + "?" + href;
 		}
 		img.addEventListener("error", this, false);
 		img.src = src;
@@ -5148,21 +5168,21 @@ class VideoPopupManager extends PopupBase {
 		}else if(src.match(/\.nicovideo.jp\/watch\/([^&\? ]+)/)){
 			const videoId = RegExp.$1;
 			const videoSize = is_embed ? ResImage.videoSize : this.videoSize;
-			href = TD.skinPath + "nicovideo.html?url=http://ext.nicovideo.jp/thumb_watch/" +
+			href = TD.skinPath + "nicovideo.html?url=https://ext.nicovideo.jp/thumb_watch/" +
 				videoId + "?w=" + videoSize.width + "&h=" + videoSize.height;
 	    }else if(src.match(/(?:\.dailymotion\.com\/video|dai\.ly)\/([^&\?_ ]+)/)){
 			const videoId = RegExp.$1;
-			href = "http://www.dailymotion.com/embed/video/" + videoId;
+			href = "https://www.dailymotion.com/embed/video/" + videoId;
 		}else if(src.match(/\.veoh\.com\/watch\/([^&\? ]+)/)){
 			const videoId = RegExp.$1;
 			const option = "&player=videodetailsembedded&videoAutoPlay=0";
-			href = "http://www.veoh.com/swf/webplayer/WebPlayer.swf?permalinkId=" + videoId + option;
+			href = "https://www.veoh.com/swf/webplayer/WebPlayer.swf?permalinkId=" + videoId + option;
 		}else if(src.match(/vimeo\.com\/(?:.*\/)?([^&\? ]+)/)){
 			const videoId = RegExp.$1;
 			href = "https://player.vimeo.com/video/" + videoId;
 		}else if(src.match(/\.metacafe\.com\/watch\/([^\/&\?_ ]+)/)){
 			const videoId = RegExp.$1;
-			href = "http://www.metacafe.com/embed/" + videoId;
+			href = "https://www.metacafe.com/embed/" + videoId;
 		}
 		return href;
 	}
@@ -5240,9 +5260,9 @@ class ThreadInfoPopupManager extends PopupBase {
 			Popup.add(content, source);
 		};
 
-		const matchPath = href.match(/(.+)\/[^\/]*$/);
+		const matchPath = href.substring(0, href.lastIndexOf('/'));
 		if (!matchPath) return;
-		const url = matchPath[1] + "/";
+		const url = matchPath + "/";
 
 		if(url in this._threadInfoCache){
 			popup(this._threadInfoCache[url]);
@@ -5447,7 +5467,7 @@ var OutlinkPopup = new OutlinkPopupManager();
 class ContextMenu {
 	/**
 	 * ContextMenu オブジェクトを作成します。
-	 * @param {Array<Array, string>}	メニュー項目
+	 * @param {Array<Array, string>}	items メニュー項目
 	 */
 	constructor(items){
 		this.log = new SkinLog("ContextMenu", SkinLogLvl.WARNING);
@@ -5455,7 +5475,7 @@ class ContextMenu {
 		/**
 		 * コンテキストメニューとして表示するメニュー項目
 		 * @type {Array}
-		 * @example
+     * 		 * @example
 		 * [
 		 *     ["MenuItem 1", "IDM_MENUITEM1"], // キャプション, ID
 		 *     [["MenuItem 2 with icon", "foobar.png"], "IDM_MENUITEM2"], // アイコン付(旧仕様)
@@ -5499,7 +5519,7 @@ class ContextMenu {
 		 */
 		this.f = this.onMouseDown.bind(this);
 		/**
-		 * メニューIDを記憶しておきます。
+		 * メニューIDを記憶
 		 * @type {number}
 		 */
 		this.prev_id = null;
@@ -5524,7 +5544,7 @@ class ContextMenu {
 	}
 	/**
 	 * コンテキストメニューを表示します。
-	 * @param {number} 		x1		メニューが表示される原点の X 座標
+   * @param {number} 		x1		メニューが表示される原点の X 座標
 	 * @param {number} 		y1		メニューが表示される原点の Y 座標
 	 * @param {number} 		[y2]	メニューが表示しきれないときに使用される原点の X 座標
 	 * @param {number} 		[y2]	メニューが表示しきれないときに使用される原点の Y 座標
@@ -5588,13 +5608,13 @@ class ContextMenu {
 			}else{
 				li.onmouseover = (e) => {
 					const parent_menu = e.currentTarget.parentNode.customMenu;
-					if(parent_menu){ //customMenu){
+					if(parent_menu){
 						parent_menu.prev_id = "";
 						parent_menu.removeChild();
 					}
 				};
 				li.onmousedown = (e) => {
-					if(e.button !== 0) return; // 左クリック以外で反応しないように
+					if(e.button !== 0) return;
 					const parent_menu = e.currentTarget.parentNode.customMenu;
 					if(parent_menu){
 						parent_menu.remove();
@@ -5806,7 +5826,6 @@ var ThreadNameContextMenu = {
 	},
 	/**
 	 * contextmenu イベントを処理します。
-	 * @param {event}	e	イベント
 	 */
 	onContextMenu(e){
 		if(e.target.id === "threadName"){
@@ -5985,7 +6004,7 @@ var ResNumberContextMenu = {
 			ResImage.embed(res, nocheck);
 			ResImage.forceEmbed = false;
 		}
-		this.onRemove(); //TN 逆参照のポップアップを削除するために必要(要確認)
+		this.onRemove();
 	},
 	/**
 	 * コンテキストメニューが削除されたときの処理をします。
@@ -5996,7 +6015,7 @@ var ResNumberContextMenu = {
 	},
 	/**
 	 * contextmenu イベントを処理します。
-	 * @param {event}	e	イベント
+   * @param {event}	e	イベント
 	 */
 	onContextMenu(e){
 		try{
@@ -6021,7 +6040,7 @@ var ResNumberContextMenu = {
 	checkHissi(date, id){
 		const boardUrl = ThreadDocument.boardUrl;
 		const idbase64 = _doc.defaultView.btoa(id).replace(/=/g, "");
-		const url = boardUrl.replace(/.*\/([^\/]+)\//, "http://hissi.org/read.php/$1/") + date + "/" + idbase64 + ".html";
+		const url = boardUrl.replace(/.*\/([^\/]+)\//, "https://hissi.org/read.php/$1/") + date + "/" + idbase64 + ".html";
 		const ret = window.confirm("ID:" + id + " を必死チェッカーもどきで検索します。");
 		if(ret) window.open(url);
 	}
@@ -6127,8 +6146,7 @@ var ChevronContextMenu = {
 	 * @param {event}	e	イベント
 	 */
 	onMouseDown(e){
-		// Chevron メニューの表示位置補正(いまいちなやり方…)
-		const nAddY = 6;		// 縦方向の補正 pixel 量(標準スタイルデフォルト:+6)
+		const nAddY = 6;
 
 		const node = e.target;
 		if(node) if(node.id === "chevron" || node.id === "chevronText"){
@@ -6196,9 +6214,6 @@ window.addEventListener("mousedown", ChevronContextMenu.onMouseDown.bind(Chevron
  * [オプション] ダイアログを管理します。
  */
 class dialogOptions {
-	/**
-	 * dialogOptions オブジェクトを作成します。
-	 */
 	constructor(){
 		this.log = new SkinLog("dialogOptions", SkinLogLvl.WARNING);
 		this.log.info("new()");
@@ -6218,12 +6233,12 @@ class dialogOptions {
 		 */
 		this._style_file = [];
 		/**
-		 * 非表示時に（縦スクロールバーが出た場合の）スクロール位置を記憶し再表示時に戻します。
+		 * 非表示時にスクロール位置を記憶します。
 		 * @type {number}
 		 */
 		this._scrollTop = 0;
 		/**
-		 * ブラウザーの表示領域のサイズを記憶しておきます。
+		 * ブラウザーの表示領域のサイズを記憶
 		 * @type {Object}
 		 */
 		this._winSize = {width:0, height:0};
@@ -6279,19 +6294,11 @@ class dialogOptions {
 			// 各要素の値を取得して設定に保存
 			const selector = 'label.dialogOptionsLabel > input, label.dialogOptionsLabel > select';
 			Array.from(_doc.querySelectorAll(selector)).forEach((elem) => {
-				if(elem.tagName === "INPUT"){
-					switch(elem.getAttribute('type')){
-						case 'checkbox':
-						case 'radio':
-							SkinPref.set(elem.id, elem.checked);
-							break;
-						case 'text':
-							SkinPref.set(elem.id, elem.value);
-							break;
-						default:
-							this.log.warn("id=" + elem.id + ", type=" + elem.getAttribute('type'));
-					}
-				}else if(elem.tagName === "SELECT"){
+				if(elem.type === 'checkbox' || elem.type === 'radio'){
+					SkinPref.set(elem.id, elem.checked);
+				} else if(elem.type === 'text'){
+					SkinPref.set(elem.id, elem.value);
+				} else if(elem.tagName === "SELECT"){
 					SkinPref.set(elem.id, elem.selectedIndex);
 				}
 			});
@@ -6346,8 +6353,9 @@ class dialogOptions {
 		const modeApply  = SkinPref.get("valueReloadForPrefApply");
 		if(needReload && modeApply !== 0){
 			if(modeApply === 2 || window.confirm("リロードが必要な項目が変更されました。リロードしますか？")){
+
 				// リロード
-				const url = location.href;
+        const url = location.href;
 				location.href = url;
 			}
 		}
@@ -6406,7 +6414,6 @@ class dialogOptions {
 		if(!this._content) return;
 		this._content.style.maxHeight = "100%";
 
-		// 現在選択ページの高さサイズ（マージンも加える）
 		if(!this._styleFrame){
 			this._styleFrame = getComputedStyle(_doc.getElementById("Frame_FAQ_FAQ"), "");
 		}
@@ -6415,7 +6422,6 @@ class dialogOptions {
 		const pageHeight = parseInt(sf.marginTop, 10) + divPage.offsetHeight + parseInt(sf.marginBottom, 10);
 		const orgHeight = this._header.offsetHeight + pageHeight + this._footer.offsetHeight + 2;
 
-		// はみ出す場合はサイズ調整
 		if(orgHeight > window.innerHeight){
 			this._content.style.height = "100%";
 			this._pageTop.style.height = this._content.offsetHeight - (this._header.offsetHeight + this._footer.offsetHeight);
@@ -6445,7 +6451,6 @@ class dialogOptions {
 		const fn = "show()";
 		this.log.info(fn);
 		if(!this._init){
-			// スタイル情報を読み込む
 			const STYLE_LIST = "style-list.txt";
 			this.log.info("loading " + STYLE_LIST + "...");
 			this._style_name = SelOpts.StyleName;
@@ -6478,7 +6483,6 @@ class dialogOptions {
 			});
 		}
 		else{
-			// ダイアログ初期設定（パージ内容は設定済み）
 			this.init();
 		}
 	}
@@ -6491,13 +6495,13 @@ class dialogOptions {
 		const bg = _doc.getElementById("dialogOptionsBackground");
 		if(bg) _doc.body.removeChild(bg);
 		window.removeEventListener("resize", this.onResize, false);
-		const body = _doc.getElementsByTagName("body").item(0);
+		const body = _doc.body;
 		body.style.overflow = "auto";
 		body.scrollTop = this._scrollTop;
 		this._winSize = {width:0, height:0};
 	}
 	/**
-	 * ダイアログの内容をクリアします。
+	 * ダイアログをクリアします。
 	 */
 	clear(){
 		this.log.info("clear()");
@@ -6597,6 +6601,7 @@ class dialogOptions {
 		return parent;
 	}
 	/**
+	/**
 	 * ラベルを追加します。
 	 * @param {string} page		追加するページの ID
 	 * @param {string} frame	フレームの ID
@@ -6617,6 +6622,7 @@ class dialogOptions {
 		li.appendChild(label);
 		parent.appendChild(li);
 	}
+	/**
 	/**
 	 * リンクを追加します。
 	 * @param {string} page		追加するページの ID
@@ -6796,18 +6802,16 @@ class dialogOptions {
 		input.addEventListener('input', (e) => {
 			let newval = e.target.value;
 			if(! /^\d*$/.test(newval)){
-				// 整数値以外の入力は前に戻す
 				newval = input.getAttribute("oldval");
 				e.target.value = newval;
 			}else{
-				// 頭の0を消す
 				if(newval.match(/^0(\d+)$/)){
 					newval = RegExp.$1;
 					e.target.value = newval;
 				}
 				e.target.setAttribute("oldval", newval);
 			}
-			this.checkChange(e.target, 　parseInt(newval));
+			this.checkChange(e.target, parseInt(newval, 10));
 		}, false);
 		label.appendChild(input);
 		if(caption_post){
@@ -6815,7 +6819,7 @@ class dialogOptions {
 			span2.textContent = caption_post;
 			label.appendChild(span2);
 		}
-		this.checkChange(input, parseInt(input.value));
+		this.checkChange(input, parseInt(input.value, 10));
 		li.appendChild(label);
 		parent.appendChild(li);
 	}
@@ -7013,7 +7017,7 @@ class dialogOptions {
 				this.addEditBox	(pg, fm, "stringMyPostBgColor", "自分のレスの強調色(ex-R): ", "", 8, 1);
 				this.addCheckBox(pg, fm, "enableHighlightReply", "返信レスを強調表示する(ex-R)");
 				this.addEditBox	(pg, fm, "stringReplyBgColor", "返信レスの強調色(ex-R): ", "", 8, 1);
-				this.addCheckBox(pg, fm, "enableNotifyReply", "新着の返信レスがあったら通知する(ex-R) ※要 Firefox 22+");
+				this.addCheckBox(pg, fm, "enableNotifyReply", "新着の返信レスがあったら通知する(ex-R)");
 				this.addLabel	(pg, fm, "", "※ [chaikaライク]の場合は強調のスタイルは独自になります",1);
 				}
 			})("MyRep");
@@ -7179,9 +7183,7 @@ class dialogOptions {
 				this.addFrame	(pg, fm, "Firefox のプライバシー設定について");
 				this.addLabel	(pg, fm, "", "本スキンは「" + origin + "」サイトのローカルストレージにスキン設定");
 				this.addLabel	(pg, fm, "", "などの各種データを保存します");
-				this.addLabel	(pg, fm, "", "Firefox の「プライバシー」(※Firefox ESR60は「ブラウザープライバシー」)");
-				this.addLabel	(pg, fm, "", "設定画面で、上記サイトから送られてきた Cookie を保存する必要があります");
-				this.addLabel	(pg, fm, "", "(※Firefox ESR60は「Cookie とサイトデータ」)");
+				this.addLabel	(pg, fm, "", "Firefox の「プライバシー」設定画面で、上記サイトから送られてきた Cookie を保存する必要があります");
 				this.addLabel	(pg, fm, "", "保存を許可していないと以下の機能が動作しません");
 				this.addLabel	(pg, fm, "", "・スキン設定の保存");
 				this.addLabel	(pg, fm, "", "・しおり機能");
@@ -7217,7 +7219,7 @@ class dialogOptions {
 		((pg) => {
 			this.addPage	(pg, "FAQ");
 			((fm) => {
-				this.addFrame	(pg, fm, "はじめに");
+				this.addFrame	(pg, fm, "FAQ");
 				this.addLabel	(pg, fm, "", "スキン設定を一度も保存していないと、この「FAQ」タブが最初に表示されます");
 				this.addLabel	(pg, fm, "", "設定を保存したはずなのに「FAQ」が表示される場合は次をお読みください");
 			})("FAQ");
@@ -7280,7 +7282,7 @@ class dialogOptions {
 					if(VerInfo._skinDerivedVersion){
 						this.addLabel(pg, fm, "labelSkinDerivedVersion", "バージョン: " + VerInfo._skinDerivedVersion);
 					}
-					this.addLink (pg, fm, "labelSkinDerivedURI", "EarlgreyTea ‏@earlgreypicard", "https://twitter.com/earlgreypicard");
+					this.addLink (pg, fm, "labelSkinDerivedURI", "EarlgreyTea", "https://twitter.com/earlgreypicard");
 					if(VerInfo._skinDerivedDisclaimer){
 						this.addLabel(pg, fm, "labelSkinDerivedCaution", VerInfo._skinDerivedDisclaimer);
 					}
@@ -7355,7 +7357,6 @@ class dialogOptions {
 					Backup.readFile(file)
 					.then((chk) => {
 						dataTypeID.forEach((type) => {
-							// 読み込んだJSONに含まれている項目のチェックボックスを表示し初期状態でチェック済みにする
 							const chklabel = _doc.getElementById("label-chk-import-" + type);
 							if(chk[type]){
 								chklabel.style.visibility = "visible";
@@ -7369,7 +7370,6 @@ class dialogOptions {
 						});
 						btnImport.value = "インポート";
 						btnImport.onclick = () => {
-							// チェックボックスで選択した項目のインポート実行
 							const select = {};
 							let isEmpty = true;
 							dataTypeID.forEach((type) => {
@@ -7381,7 +7381,6 @@ class dialogOptions {
 								return;
 							}
 							Backup.execImport(select);
-							// インポート後にダイアログは速やかに終了させる必要あるためリロードかダイアログ終了を選択させる
 							if(window.confirm("すぐにリロードしますか？（キャンセルの場合は[オプション]ダイアログを閉じます）")){
 								const url = location.href;
 								location.href = url;
@@ -7610,9 +7609,6 @@ var Analyse = new AnalyseManager();
  * [スレッド情報] ダイアログを扱います。
  */
 class dialogAnalyse {
-	/**
-	 * dialogAnalyse オブジェクトを作成します。
-	 */
 	constructor(){
 		this.log = new SkinLog("dialogAnalyse", SkinLogLvl.WARNING);
 		this.log.info("new()");
@@ -7681,7 +7677,7 @@ class dialogAnalyse {
 		const bg = _doc.getElementById("dialogAnalyseBackground");
 		if(bg) _doc.body.removeChild(bg);
 		window.removeEventListener("resize", AnalyseDialog.onResize, false);
-		const body = _doc.getElementsByTagName("body").item(0);
+		const body = _doc.body;
 		body.style.overflow = "";
 	}
 	/**
@@ -7833,7 +7829,7 @@ class dialogAnalyse {
 		const a = _doc.createElement("a");
 		a.setAttribute("href", uri);
 		a.setAttribute("rel", caption);
-		a.setAttribute("res", index);	// レス番号を紐付けしておく
+		a.setAttribute("res", index);
 		a.addEventListener("mouseover", OutlinkPopup, false);
 		a.setAttribute("target", "_blank");
 		a.className = "outLink";
@@ -7907,6 +7903,7 @@ class dialogAnalyse {
 		parentObject.appendChild(li);
 	}
 	/**
+	/**
 	 * 逆参照を追加します。
 	 * @param {string} page		追加するページのID
 	 * @param {string} frame	フレームのID
@@ -7927,7 +7924,6 @@ class dialogAnalyse {
 		const label = _doc.createElement("label");
 		label.className = "dialogAnalyseLabel";
 		const a = _doc.createElement("a");
-		//a.setAttribute("target", "_blank");
 		a.className = "resPointer";
 		a.textContent = ">>" + index;
 		label.appendChild(a);
@@ -7936,7 +7932,7 @@ class dialogAnalyse {
 		parentObject.appendChild(li);
 	}
 	/**
-	 * [スレッド情報] ダイアログを表示します。
+	 * [スレッド情報] 解析とダイアログ構築
 	 */
 	analyse(){
 		this.log.info("analyse()");
@@ -7964,7 +7960,6 @@ class dialogAnalyse {
 		this.addLabel("Thread", "Summary", "", Analyse.getPaceString(resRange, true), null, 1);
 
 		// ------------- 中の人
-		// --- 名前
 		this.addPage ("User", "中の人");
 		this.addFrame("User", "Name", "名前",96);
 		const nameArray = [];
@@ -7975,7 +7970,6 @@ class dialogAnalyse {
 		for(let i = 0, n = nameArray.length; i < n; i++){
 			this.addName("User", "Name", "", nameArray[i].name, nameArray[i].count);
 		}
-		// --- ID
 		this.addFrame("User", "ID", "ID",96);
 		const idArray = [];
 		for(let id in ID.items){
@@ -7986,7 +7980,6 @@ class dialogAnalyse {
 		for(let i = 0, n = idArray.length; i < n; i++){
 			this.addID("User", "ID", "", idArray[i].id, idArray[i].count);
 		}
-		// --- 人気レス
 		this.addFrame("User", "Trackback", "人気レス",96);
 		const trackbackArray = [];
 		Trackback.traverse();
@@ -8000,6 +7993,7 @@ class dialogAnalyse {
 			hasbeenAdded = true;
 		}
 		if(!hasbeenAdded) this.addLabel("User", "Trackback", "", "なし");
+
 		// ------------- リンク
 		this.addPage ("Link", "リンク");
 		this.addFrame("Link", "Internal", "内部リンク", 128);
@@ -8015,7 +8009,8 @@ class dialogAnalyse {
 		let extCount = 0;
 		let chCount = 0;
 
-		const domain = TD.threadUrl.replace(/^https?:\/\/[^.]+(\.[^.\/]+\.[^.\/]+)\/.+/, "$1");
+		// 標準 URL API で安全にドメインパートを抽出
+		const domain = new URL(TD.threadUrl).hostname;
 		ResNodes.getOutLinks().forEach((node) => {
 			const href = node.rel;
 			if(!urlTable[href]){
@@ -8031,7 +8026,7 @@ class dialogAnalyse {
 					videoCount++;
 					this.addLink ("Video", "Video", "", href, node.href, resNum);
 				}else{
-					if(href.indexOf(domain) === -1){
+					if(new URL(node.href, location.href).hostname !== domain){
 						extCount++;
 						this.addLink ("Link", "External", "", href, node.href, resNum);
 					}else{
@@ -8046,7 +8041,7 @@ class dialogAnalyse {
 		if(!videoCount) this.addLabel ("Video", "Video", "", "なし");
 		if(!extCount)   this.addLabel ("Link", "External", "", "なし");
 		if(!chCount)    this.addLabel ("Link", "Internal", "", "なし");
-		// -------------
+
 		this.show();
 	}
 }
@@ -8062,7 +8057,7 @@ class ReplaceStrManager {
 	constructor() {
 		this.log = new SkinLog("ReplaceStr", SkinLogLvl.WARNING);
 		/**
-		 * 変換用データ(DB に格納する内部フォーマット)
+		 * 変換用データ
 		 * @type {Array<Array>}
 		 */
 		this.items_org = [];
@@ -8074,9 +8069,6 @@ class ReplaceStrManager {
 		this.target_max = 0;
 	}
 
-	/**
-	 * 変換用データを読み込み前に初期化します。
-	 */
 	init() {
 		this.items_org = [];
 		this.items = [];
@@ -8096,8 +8088,9 @@ class ReplaceStrManager {
 				let flags = "";
 				let src;
 
+
 				// 置換対象
-				if (target !== "name" && target !== "mail" && target !== "date" && target !== "id") {
+        if (target !== "name" && target !== "mail" && target !== "date" && target !== "id") {
 					target = "msg";
 				}
 
@@ -8172,7 +8165,7 @@ class ReplaceStrManager {
 	}
 
 	/**
-	 * localStorage に変換のデータを保存します。
+	 * localStorage に設定を保存
 	 */
 	save() {
 		this.log.dbg("save()");
@@ -8185,7 +8178,7 @@ class ReplaceStrManager {
 	}
 
 	/**
-	 * 変換用データを読み込みます。
+	 * 変換データを展開
 	 */
 	load(url, title) {
 		this.log.dbg("load(" + url + ", " + title + ")");
@@ -8221,9 +8214,6 @@ class ReplaceStrManager {
 		}
 	}
 
-	/**
-	 * 変換用のデータを削除します。
-	 */
 	clear() {
 		this.log.dbg("clear()");
 		Storage.remove("valueReplaceStr");
@@ -8232,7 +8222,7 @@ class ReplaceStrManager {
 	}
 
 	/**
-	 * 変換を実行します。
+	 * 置換の実行
 	 */
 	replace(url, title, node) {
 		this.log.dbg("replace(url,title,node)");
@@ -8276,7 +8266,7 @@ var ReplaceStr = new ReplaceStrManager();
 //======================================
 
 /**
- * 即時あぼーんやあぼーんレスの展開/折り畳み動作に対応するクラス
+ * 即時あぼーんや展開/折り畳み動作に対応するクラス
  */
 class b2rAboneHandlerManager {
 	constructor() {
@@ -8285,7 +8275,7 @@ class b2rAboneHandlerManager {
 	/**
 	 * イベントリスナを登録します。
 	 */
-	startup(){
+  startup(){
 		this.log.info("startup()");
 		_doc.addEventListener("click", this, false);
 		_doc.addEventListener("chaika-abone-add", this, false);
@@ -8306,7 +8296,6 @@ class b2rAboneHandlerManager {
 				const is_hide = res.getAttribute("concealed");
 				res.setAttribute("concealed", is_hide === "true" ? "false" : "true");
 
-				// あぼーん状態が切り替わったため、キャッシュをクリア
 				ResNodes.clearCache();
 			}
 		}else{
@@ -8339,15 +8328,15 @@ class b2rAboneHandlerManager {
 				}
 			});
 
-			// あぼーんの追加/削除処理が走ったため、キャッシュをクリア
 			ResNodes.clearCache();
 		}
 	}
 
+
 	/**
 	 * あぼーんの設定変更を反映させるためスレッドをリロードします。
 	 */
-	reloadThread(toggle){
+  reloadThread(toggle){
 		this.log.info("reloadThread()");
 		const url = location.href;
 		if(toggle){
@@ -8368,7 +8357,7 @@ var b2rAboneHandler = new b2rAboneHandlerManager();
 b2rAboneHandler.startup();
 
 //======================================
-// Flashプラグイン関連
+// 音声再生関連 (脱Flash/標準準拠)
 //======================================
 
 /**
@@ -8379,7 +8368,7 @@ class SoundUnitManager {
 		this.audio = null;
 	}
 	/**
-	 * 新着時の音を再生します。
+	 * 新着時の音を再生します。(標準 HTML5 Audio)
 	 */
 	play(){
 		try {
@@ -8394,26 +8383,21 @@ class SoundUnitManager {
 			console.error("Audio initialization failed:", e);
 		}
 	}
-	// 互換性のためのダミー
 	playMP3() { return true; }
-	playSWF() {}
+	playSWF() {} // 互換用ダミーシェル
 }
 // グローバル変数名へのマッピング
 var SoundUnit = new SoundUnitManager();
 
 /**
- * クリップボード操作を行うクラス
+ * クリップボード操作を行うクラス (安全化リファクタリング)
  */
 class ClipboardManager {
-  constructor(){
+	constructor(){
 		this.cb = null;
-		// 互換用プロパティ
 		this.copy_text = null;
 	}
 	doCopy() { return this.copy_text; }
-	/**
-	 * 仮想クリップボードを準備します。
-	 */
 	init(){
 		this.cb = _doc.getElementById('div-clipboard');
 	}
@@ -8432,29 +8416,28 @@ class ClipboardManager {
 		}
 	}
 	/**
-	 * 旧来のクリップボードコピーロジック（フォールバック用）
+	 * 安全性の高いフォールバックコピー (XSS脆弱性完全排除)
 	 */
 	fallbackCopy(text) {
 		if (!this.cb) return;
-		this.cb.innerHTML = text.replace(/\n/g, "<br>");
+		this.cb.textContent = text; // XSSを防ぐ安全代入
+		this.cb.style.whiteSpace = "pre-wrap"; // 改行再現
 		const range = document.createRange();
 		range.selectNode(this.cb);
 		const selection = window.getSelection();
 		selection.removeAllRanges();
 		selection.addRange(range);
-		try{
+		try {
 			document.execCommand('copy');
-		}catch(err){
+		} catch(err) {
 			console.error("Fallback clipboard copy failed:", err);
 		}
 		selection.removeAllRanges();
-		this.cb.innerHTML = "";
+		this.cb.textContent = "";
 	}
 }
 // グローバル変数名へのマッピング
 var Clipboard = new ClipboardManager();
-
-
 
 //======================================
 // Punycode エンコーダ関連
@@ -8566,7 +8549,7 @@ class PunycodeEncoder {
 var Punycode = new PunycodeEncoder();
 
 
-// DOM要素の欠落時にもスクリプトが落ちないよう安全ガード付きで登録します
+// DOM要素の欠落時にもスクリプトが落ちないよう安全ガード付きで登録
 Nodes.threadName && (Nodes.threadName.onclick = () => TD.reload());
 _doc.getElementById("autoReload") && (_doc.getElementById("autoReload").onclick = () => AutoReload.toggle());
 _doc.getElementById("autoScroll") && (_doc.getElementById("autoScroll").onclick = () => AutoScroll.toggle());
@@ -8585,5 +8568,6 @@ Nodes.statusText && (Nodes.statusText.onfocus = () => Nodes.statusText.select())
 Nodes.statusText && (Nodes.statusText.onclick = () => TD.scrollToNewRes());
 
 
+// スキンスクリプト全体のメイン実行
 TD.run();
 //---- end of script ----
