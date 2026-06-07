@@ -65,7 +65,7 @@ var OptionsDialog = null;
 var AnalyseDialog = null;
 
 /**
- * スタイルシートを動的に作成・制御します。
+ * スタイルシートを動的に作成・制御します。(Constructable StyleSheets仕様)
  */
 // eslint-disable-next-line no-redeclare
 class StyleSheet {
@@ -74,38 +74,34 @@ class StyleSheet {
 	 * @param {string}	id	スタイルシートのID
 	 */
 	constructor(id){
-		let style = _doc.getElementById(id);
-		if(!style){
-			style = _doc.createElement("style");
-			style.type = "text/css";
-			style.id = id;
-			(_doc.head ?? _doc.getElementsByTagName("head")[0]).appendChild(style);
-		}
-		this._style = style;
+		this._id = id;
+		this._sheet = new CSSStyleSheet();
+		// 重複登録を避けてドキュメントにアタッチ
+		document.adoptedStyleSheets = [...document.adoptedStyleSheets.filter(s => s._id !== id), this._sheet];
+		this._sheet._id = id; // 識別用プロパティをアタッチ
 	}
 	/**
 	 * スタイルシートを削除します。
 	 */
 	remove(){
-		this._style.parentNode?.removeChild(this._style);
+		document.adoptedStyleSheets = document.adoptedStyleSheets.filter(s => s !== this._sheet);
 	}
 	/**
 	 * スタイルルールを挿入します。
 	 * @param {string} rule		CSSルール
 	 */
 	insert(rule){
-		this._style.sheet?.insertRule(rule, 0);
+		try {
+			this._sheet.insertRule(rule, 0);
+		} catch (e) {
+			console.warn("StyleSheet: failed to insert rule:", rule, e);
+		}
 	}
 	/**
 	 * スタイルルールを全消去します。
 	 */
 	clear(){
-		const sheet = this._style.sheet;
-		if(!sheet) return;
-		const l = sheet.cssRules.length;
-		for(let i = l - 1; i >= 0; i--){
-			sheet.deleteRule(i);
-		}
+		this._sheet.replaceSync("");
 	}
 }
 
@@ -329,18 +325,38 @@ class NodesManager {
 var Nodes = new NodesManager();
 
 /**
- * DOM 操作のために、主に動的なノードを管理するクラス
+ * DOM 操作のために、主に動的なノードをキャッシュして超高速化するクラス
  */
 class ResNodesManager {
 	constructor() {
 		this.log = new SkinLog("ResNodes", SkinLogLvl.WARNING);
+		this.clearCache();
 	}
 	errUndef(fn){ this.log.err(fn + " 有効な引数が指定されていません"); }
 	errNotFound(fn){ this.log.err(fn + " 要素が見つかりません"); }
+
+	/**
+	 * キャッシュを完全にクリアします（新着レス追加やあぼーん同期時に自動実行されます）。
+	 */
+	clearCache() {
+		this._containers = null;
+		this._headers = null;
+		this._newHeaders = null;
+		this._numbers = null;
+		this._names = null;
+		this._mails = null;
+		this._dates = null;
+		this._ids = null;
+		this._beids = null;
+		this._infoAbones = null;
+		this._bodies = null;
+		this._resAnchors = null;
+		this._resMesIds = null;
+		this._outLinks = null;
+	}
+
 	/**
 	 * レス要素の子要素から、レスのコンテナ要素を検索します。
-	 * @param {Element} node		レス要素の子要素
-	 * @return {Element} コンテナ要素
 	 */
 	getParentContainer(node){
 		const fn = "getParentContainer(node)";
@@ -350,12 +366,6 @@ class ResNodesManager {
 		if(!parent) this.errNotFound(fn);
 		return parent;
 	}
-	/**
-	 * レス要素の子要素から、指定したクラス名を持つ親要素を検索します。
-	 * @param {Element} node		レス要素の子要素
-	 * @param {boolean} classname	親要素のクラス名
-	 * @return {Element} 親要素
-	 */
 	getParentByClassName(node, classname){
 		const fn = "getParentByClassName(node,'" + classname + "')";
 		if(!node || !classname){ this.errUndef(fn); return null; }
@@ -366,165 +376,120 @@ class ResNodesManager {
 		}
 		return null;
 	}
-	/**
-	 * 外部リンク要素からレス番号を取得します。
-	 * @param {Element} node	外部リンク要素
-	 * @return {number} レス番号
-	 */
 	getResNumByOutLink(node){
 		if(!node) return 0;
 		if(node.hasAttribute("res")){
-			// スレッド情報ダイアログのリンク
 			return parseInt(node.getAttribute("res"), 10);
 		}
 		const parent = this.getParentContainer(node);
 		if(!parent) return 0;
-		// レス本文のリンク
 		return parseInt(parent.getAttribute("res"), 10);
 	}
-	/**
-	 * 指定されたレス番号から、レス要素を取得します。
-	 * @param {number}		resNum	レス番号
-	 * @return {Element}	レス要素
-	 */
 	getContainerByResNum(resNum){
 		const fn = "getContainerByResNum(" + resNum +")";
 		if(!resNum){ this.errUndef(fn); return null; }
 		return _doc.getElementById("res" + resNum);
 	}
-	/**
-	 * 指定されたレス番号から、本文要素を取得します。
-	 * @param {number}		resNum	レス番号
-	 * @return {Element}	レス要素
-	 */
 	getBodyByResNum(resNum){
 		const fn = "getBodyByResNum(" + resNum + ")";
 		if(!resNum){ this.errUndef(fn); return null; }
 		return _doc.getElementById("body" + resNum);
 	}
-	/**
-	 * すべてのレス要素を取得します。
-	 * @param {Element}		node		親ノード
-	 * @param {boolean}		[selected]	選択されたレスのみ
-	 * @return {Array<Element>}	要素の配列
-	 */
+
+	// ------------------------------------------------------------------
+	// 以下、node引数（個別ポップアップ解析等）がない場合は、
+	// メモリ上のキャッシュから一瞬でレスの要素配列を返します。
+	// ------------------------------------------------------------------
 
 	getContainers(node, selected){
-		let elems = Array.from((node || Nodes.content).querySelectorAll(selected ? ".resSelected" : ".resContainer"));
-		if(selected || (elems && elems.length > 0)) return elems;
-		elems = Array.from((node || Nodes.popupRoot).getElementsByClassName("resPopup"));
-		return elems || [];
+		if(selected) {
+			return Array.from((node || Nodes.content).querySelectorAll(".resSelected"));
+		}
+		if(!node && this._containers) return this._containers;
+		let elems = Array.from((node || Nodes.content).querySelectorAll(".resContainer"));
+		const result = (elems && elems.length > 0) ? elems : (Array.from((node || Nodes.popupRoot).getElementsByClassName("resPopup")) || []);
+		if(!node) this._containers = result;
+		return result;
 	}
-	/**
-	 * すべての既読レスヘッダ要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getHeaders(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resHeader")) || [];
+		if (!node && this._headers) return this._headers;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resHeader")) || [];
+		if (!node) this._headers = result;
+		return result;
 	}
-	/**
-	 * すべての新着レスヘッダ要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getNewHeaders(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resNewHeader")) || [];
+		if (!node && this._newHeaders) return this._newHeaders;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resNewHeader")) || [];
+		if (!node) this._newHeaders = result;
+		return result;
 	}
-	/**
-	 * すべてのレス番号要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getNumbers(node){
-		return Array.from((node || Nodes.content).querySelectorAll(".resNumber > a")) || [];
+		if (!node && this._numbers) return this._numbers;
+		const result = Array.from((node || Nodes.content).querySelectorAll(".resNumber > a")) || [];
+		if (!node) this._numbers = result;
+		return result;
 	}
-	/**
-	 * すべての名前欄要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getNames(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resName")) || [];
+		if (!node && this._names) return this._names;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resName")) || [];
+		if (!node) this._names = result;
+		return result;
 	}
-	/**
-	 * すべてのメール欄要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getMails(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resMail")) || [];
+		if (!node && this._mails) return this._mails;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resMail")) || [];
+		if (!node) this._mails = result;
+		return result;
 	}
-	/**
-	 * すべての日付欄要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getDates(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resDate")) || [];
+		if (!node && this._dates) return this._dates;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resDate")) || [];
+		if (!node) this._dates = result;
+		return result;
 	}
-	/**
-	 * すべての ID 欄要素を取得します。
-	 * @param {Element}	node	親ノード（ポップアップは対象外なので無意味）
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getIDs(node){
-		return Array.from((node || Nodes.content).querySelectorAll(".resContainer .resID[rel]")) || [];
+		if (!node && this._ids) return this._ids;
+		const result = Array.from((node || Nodes.content).querySelectorAll(".resContainer .resID[rel]")) || [];
+		if (!node) this._ids = result;
+		return result;
 	}
-
-	/**
-	 * すべての BeID 欄要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getBeIDs(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resBeID")) || [];
+		if (!node && this._beids) return this._beids;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resBeID")) || [];
+		if (!node) this._beids = result;
+		return result;
 	}
-
-	/**
-	 * すべての有効なあぼーん情報要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getInfoAbones(node){
-		return Array.from((node || Nodes.content).querySelectorAll(".resContainer[aboned='true'] .resInfoAbone")) || [];
+		if (!node && this._infoAbones) return this._infoAbones;
+		const result = Array.from((node || Nodes.content).querySelectorAll(".resContainer[aboned='true'] .resInfoAbone")) || [];
+		if (!node) this._infoAbones = result;
+		return result;
 	}
-	/**
-	 * すべての本文要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getBodies(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resBody")) || [];
+		if (!node && this._bodies) return this._bodies;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resBody")) || [];
+		if (!node) this._bodies = result;
+		return result;
 	}
-	/**
-	 * すべてのレスアンカー要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
-
 	getResAnchors(node){
-		return Array.from((node || Nodes.content).querySelectorAll(".resBody .resPointer")) || [];
+		if (!node && this._resAnchors) return this._resAnchors;
+		const result = Array.from((node || Nodes.content).querySelectorAll(".resBody .resPointer")) || [];
+		if (!node) this._resAnchors = result;
+		return result;
 	}
-	/**
-	 * すべてのIDアンカーの外側span要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getResMesIDs(node){
-		return Array.from((node || Nodes.content).getElementsByClassName("resMesID")) || [];
+		if (!node && this._resMesIds) return this._resMesIds;
+		const result = Array.from((node || Nodes.content).getElementsByClassName("resMesID")) || [];
+		if (!node) this._resMesIds = result;
+		return result;
 	}
-	/**
-	 * すべての外部リンク要素を取得します。
-	 * @param {Element}	node	親ノード
-	 * @return {Array<Element>}	要素の配列
-	 */
 	getOutLinks(node){
-		return Array.from((node || Nodes.content).querySelectorAll(".resBody .outLink, .ivurLink, .ivurBlockedLink"));
+		if (!node && this._outLinks) return this._outLinks;
+		const result = Array.from((node || Nodes.content).querySelectorAll(".resBody .outLink, .ivurLink, .ivurBlockedLink"));
+		if (!node) this._outLinks = result;
+		return result;
 	}
-	/**
-	 * 表示中のスレッドのレス範囲を取得します。
-	 */
+
 	getResRange(){
 		const resItems = this.getContainers();
 		return {
@@ -532,24 +497,12 @@ class ResNodesManager {
 			last: Nodes.getResNumByContainer(resItems[resItems.length - 1])
 		};
 	}
-	/**
-	 * Favicon の link 要素を取得します。
-	 * @return {Element}	要素
-	 */
 	getFavicon(){
 		return _doc.querySelectorAll("link[rel='icon']")[0];
 	}
-	/**
-	 * すべてのレス要素の親要素である div 要素を取得します。
-	 * @param	{Element}	node	親ノード
-	 * @return	{Element}	要素
-	 */
 	getContent(node){
 		return (node || _doc).querySelectorAll('div#content')[0];
 	}
-	/**
-	 * レス番号から、指定された形式でレスの内容を取得。
-	 */
 	getEntireTextByIndex(resNum, format){
 		const fn = "getEntireTextByIndex(" + resNum + ",'" + format + "')";
 		this.log.info(fn);
@@ -571,7 +524,7 @@ class ResNodesManager {
 		case "Report":
 			str = resNum + " " + date.replace(/([^ ]+)\(.*\)( [^ ]+)/, "$1$2");
 			break;
-		default: /* "V2C" etc */
+		default:
 			str = resNum + " ：" + name + " ：" + date;
 			break;
 		}
@@ -584,39 +537,21 @@ class ResNodesManager {
 		}
 		return str;
 	}
-	/**
-	 * 名前欄の文字列を取得します。
-	 */
 	getNameText(node){
 		return this.getNames(node)[0]?.textContent || "";
 	}
-	/**
-	 * メール欄の文字列を取得します。
-	 */
 	getMailText(node){
 		return (this.getMails(node)[0]?.textContent || "").replace(/^ | $/g, "");
 	}
-	/**
-	 * 日付欄の文字列を取得します。
-	 */
 	getDateText(node){
 		return (this.getDates(node)[0]?.textContent || "").replace(/^ | $/g, "");
 	}
-	/**
-	 * ID 欄の文字列を取得します。
-	 */
 	getIDText(node){
 		return (this.getIDs(node)[0]?.textContent || "").replace(/^ *(ID:[^ ]*).*/, "$1");
 	}
-	/**
-	 * BeID 欄の文字列を取得します。
-	 */
 	getBeIDText(node){
 		return (this.getBeIDs(node)[0]?.textContent || "").replace(/^ *([^ ]*).*/, "$1");
 	}
-	/**
-	 * 本文の文字列を取得します。
-	 */
 	getBodyText(node){
 		return ThreadDocument.getInnerText(this.getBodies(node)[0], false).replace(/ \n /g, "\n").replace(/^ | $/g, "") + "\n";
 	}
@@ -1193,7 +1128,8 @@ class ThreadDocumentManager {
 		}
 		MyAndRep.scanMyPostAndReply();
 	}
-	/**
+
+  /**
 	 * XMLHttpRequest を利用して、動的にレスを挿入します。
 	 */
 	asyncInsert(start, end, before, scrollToTop, func, noUpdate, noScroll){
@@ -1221,6 +1157,9 @@ class ThreadDocumentManager {
 					.forEach((res) => Nodes.content.appendChild(res, resStart));
 			}
 
+			// DOMに新要素が挿入されたため、安全にキャッシュをクリア
+			ResNodes.clearCache();
+
 			if(scrollToTop){
 				window.scrollTo(0,0);
 			}else{
@@ -1245,6 +1184,7 @@ class ThreadDocumentManager {
 			this.log.err(fn + ":" + e.message);
 		});
 	}
+
 	/**
 	 * 表示域外のレスをすべて表示します。
 	 */
@@ -1264,6 +1204,7 @@ class ThreadDocumentManager {
 		if(startIndex > 2) this.asyncInsert(2, startIndex - 1, true, true);
 		if(endIndex < this.countAll) this.asyncInsert(endIndex + 1, this.countAll, false, true);
 	}
+
   /**
 	 * 更新をチェックし新着レスがあれば挿入します。
 	 */
@@ -1309,10 +1250,8 @@ class ThreadDocumentManager {
 				return;
 			}
 
-			// 新着要素の純粋な個数をカウント
 			const newres = newItems.length - 1;
 
-			// 取得した最後尾のレス要素から、実際のレス番号を数値として安全に取得
 			const lastItem = newItems[newItems.length - 1];
 			const lastResNum = lastItem ? parseInt(lastItem.getAttribute("res"), 10) : NaN;
 
@@ -1323,7 +1262,6 @@ class ThreadDocumentManager {
 				this.countUnread += newres;
 			}
 
-			// 単純な要素数の足し算ではなく、最後尾の実際のレス番号を countAll に代入 (取得できない場合は安全にフォールバック)
 			this.countAll = isNaN(lastResNum) ? (this.countRead + this.countUnread) : lastResNum;
 			this.setStatus(true);
 
@@ -1333,6 +1271,9 @@ class ThreadDocumentManager {
 			for(let i = 1; i < newItems.length; i++){
 				Nodes.content.appendChild(newItems[i]);
 			}
+
+			// 新着がDOMにマージされたため、安全にキャッシュをクリア
+			ResNodes.clearCache();
 
 			window.setTimeout(() => {
 				this.modifyContent(Nodes.content);
@@ -3441,98 +3382,78 @@ class AutoScrollManager {
 // グローバル変数名へのマッピング
 var AutoScroll = new AutoScrollManager();
 
-
 /**
- * 左右カーソルキーによるスムーズスクロール機能を管理するクラス
+ * 左右カーソルキーによるスムーズスクロール機能をネイティブCSSOM APIで滑らかに管理するクラス
  */
 class PageScrollerManager {
 	constructor() {
 		this.log = new SkinLog("PageScroller", SkinLogLvl.WARNING);
-		/**
-		 * スクロール位置
-		 * @type {number}
-		 */
-		this.y = null;
-		/**
-		 * 現在のスクロール対象のレス番号
-		 * @type {number}
-		 */
-		this.index = null;
-		/**
-		 * 速度
-		 * @type {number}
-		 */
-		this.currentVelocity = 0;
-		/**
-		 * 初速
-		 * @type {number}
-		 */
-		this.initialVelocity = 0;
-		/**
-		 * ジェネレータ・イテレータ
-		 * @type {iterator}
-		 */
-		this.gen = null;
-		/**
-		 * まだスクロール中かどうか
-		 * @type {boolean}
-		 */
-		this.isBusy = false;
-		/**
-		 * ジェネレータの実行をリスタートすべきかどうか
-		 * @type {boolean}
-		 */
-		this.shouldRestart = false;
 	}
+
+	/**
+	 * 現在のスクロール位置 (互換性維持のためのダミープロパティ)
+	 * @type {number}
+	 */
+	get y() { return window.pageYOffset; }
+	set y(val) { /* setter dummy */ }
+
+	/**
+	 * スクロールを要求します。(ネイティブスムーズスクロール)
+	 */
+	requestScroll(diff){
+		this.log.info("requestScroll(diff)");
+		let targetY = window.pageYOffset;
+		if (typeof diff !== "undefined") {
+			targetY += diff;
+		}
+
+		const maxScroll = _doc.body.offsetHeight - window.innerHeight;
+		targetY = Math.max(0, Math.min(targetY, maxScroll));
+
+		window.scrollTo({
+			top: targetY,
+			behavior: SkinPref.get("enableSmoothScroll") ? "smooth" : "auto"
+		});
+	}
+
 	/**
 	 * 先頭/最後のレスへスクロールします。
 	 */
 	scrollTopEnd(to){
 		this.log.info("scrollTopEnd(" + to + ")");
 		const resArray = ResNodes.getContainers();
-		let dest = null;
-		if(to === "top"){
-			dest = resArray[0];
-		}else if(to === "end"){
-			dest = resArray[resArray.length - 1];
-		}
+		if (!resArray.length) return;
+
+		const dest = (to === "top") ? resArray[0] : resArray[resArray.length - 1];
 		if(dest){
-			this.y = dest.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
-			this.requestScroll();
+			const targetY = dest.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
+			window.scrollTo({
+				top: targetY,
+				behavior: SkinPref.get("enableSmoothScroll") ? "smooth" : "auto"
+			});
 		}
 	}
+
 	/**
 	 * 前のレスへスクロールします。
 	 */
 	prev(){
 		this.log.info("prev()");
 		const resItems = ResNodes.getContainers();
-		if(this.isBusy){
-			this.index--;
-			for(let i = this.index ; i >= 0 ; i--){
-				if(TD.isShow(resItems[i])) break;
-				this.index--;
-			}
-			const res = resItems[this.index];
-			if(res){
-				this.y = res.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
-				this.requestScroll();
-			}
-		}else{
-			const top = window.pageYOffset + (Nodes.header.offsetTop + Nodes.header.offsetHeight);
-			for(let i = resItems.length - 1; i >= 0 ; --i){
-				const resTop = resItems[i];
-				if(TD.isShow(resTop) && (resTop.offsetTop < top)){
-					if(resTop){
-						this.index = i;
-						this.y = resTop.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
-						this.requestScroll();
-					}
-					break;
-				}
+		const top = window.pageYOffset + (Nodes.header.offsetTop + Nodes.header.offsetHeight);
+		for(let i = resItems.length - 1; i >= 0 ; --i){
+			const resTop = resItems[i];
+			if(TD.isShow(resTop) && (resTop.offsetTop < top - 2)){ // 微小な位置判定の誤差を吸収
+				const targetY = resTop.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
+				window.scrollTo({
+					top: targetY,
+					behavior: SkinPref.get("enableSmoothScroll") ? "smooth" : "auto"
+				});
+				break;
 			}
 		}
 	}
+
 	/**
 	 * 次のレスへスクロールします。
 	 */
@@ -3540,112 +3461,28 @@ class PageScrollerManager {
 		this.log.info("next()");
 		const resItems = ResNodes.getContainers();
 		const n = resItems.length;
-		if(this.isBusy){
-			this.index++;
-			for(let i = this.index ; i < n; i++){
-				if(resItems[i].style.display !== "none") break;
-				this.index++;
-			}
-			const res = resItems[this.index];
-			if(res){
-				this.y = res.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
-				this.requestScroll();
-			}
-		}else{
-			const top    = window.pageYOffset + (Nodes.header.offsetTop + Nodes.header.offsetHeight);
-			let resTop = null;
-			for(let i = 0; i < n; i++){
-				if(TD.isShow(resItems[i]) && (resItems[i].offsetTop > top)){
-					resTop = resItems[i];
-					if(resTop){
-						this.index = i;
-						this.y = resTop.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
-						this.requestScroll();
-					}
-					break;
+		const top = window.pageYOffset + (Nodes.header.offsetTop + Nodes.header.offsetHeight);
+		let resTop = null;
+		for(let i = 0; i < n; i++){
+			if(TD.isShow(resItems[i]) && (resItems[i].offsetTop > top + 2)){
+				resTop = resItems[i];
+				if(resTop){
+					const targetY = resTop.offsetTop - (Nodes.header.offsetTop + Nodes.header.offsetHeight);
+					window.scrollTo({
+						top: targetY,
+						behavior: SkinPref.get("enableSmoothScroll") ? "smooth" : "auto"
+					});
 				}
-			}
-			if(!resTop){
-				this.index = n - 1;
-				this.y = _doc.body.offsetHeight;
-				this.requestScroll();
+				break;
 			}
 		}
-	}
-	/**
-	 * スクロールを要求します。
-	 */
-	requestScroll(diff){
-		const fn = "requestScroll(diff)";
-		this.log.info(fn);
-		if(diff) this.y = window.pageYOffset + diff;
-		if(!(SkinPref.get("enableSmoothScroll"))){
-			window.scrollTo(0, this.y);
-		}else if(this.isBusy){
-			this.shouldRestart = true;
-		}else{
-			this.scroll();
+		if(!resTop){
+			const targetY = _doc.body.offsetHeight;
+			window.scrollTo({
+				top: targetY,
+				behavior: SkinPref.get("enableSmoothScroll") ? "smooth" : "auto"
+			});
 		}
-	}
-	/**
-	 * スクロール処理を実行・管理します。
-	 */
-	scroll(){
-		this.log.info("scroll()");
-
-		this.gen = this.execScroll();
-		this.isBusy = true;
-		const id = setInterval(() => {
-			if(this.shouldRestart){
-				this.gen.return(0);
-				this.gen = this.execScroll();
-				this.shouldRestart = false;
-			}
-			if(this.gen.next().done){
-				clearInterval(id);
-				this.isBusy = false;
-			}
-		}, 0, this.y);
-	}
-	/**
-	 * 実際のスクロール処理を行います。これは yield を使ったジェネレータ（コルーチン）です。
-	 */
-	*execScroll(){
-		const y1 = window.pageYOffset;
-		let   y2 = parseInt(this.y, 10);
-		if(isNaN(y2)) y2 = 0;
-		if(y2 < 0) y2 = 0;
-		if((y2 + window.innerHeight) > _doc.body.offsetHeight) y2 = _doc.body.offsetHeight - window.innerHeight;
-		const delta = y2 - y1;
-		let steps_half;
-		switch (SkinPref.get("valueSmoothScrollFrames")){
-			case 0: steps_half = 8; break;
-			case 1: steps_half = 12; break;
-			case 2: steps_half = 16; break;
-			default: steps_half = 12;
-		}
-		this.initialVelocity = this.currentVelocity;
-		const a1 = (((delta / 2) - this.initialVelocity) * 2) / (steps_half * steps_half);
-		const ha1 = a1 / 2;
-
-		let stepIdx = 0;
-		for(let x = 0; x < steps_half; ++x){
-			yield stepIdx++;
-			window.scrollTo(0, this.initialVelocity + y1 + (ha1 * (x * x)));
-			this.currentVelocity = (a1 * x);
-		}
-
-		const a2 = delta / (steps_half * steps_half);
-		const ha2 = a2 / 2;
-		for(let x = steps_half - 1; x >= 0; --x){
-			yield stepIdx++;
-			window.scrollTo(0, y2 - (ha2 * (x * x)));
-			this.currentVelocity = (a2 * x);
-		}
-
-		window.scrollTo(0, y2);
-		this.initialVelocity = 0;
-		this.currentVelocity = 0;
 	}
 }
 // グローバル変数名へのマッピング
@@ -8219,82 +8056,67 @@ class dialogAnalyse {
 //======================================
 
 /**
- * ReplaceStr.txt を扱います。
+ * ReplaceStr.txt を扱うクラスです。
  */
-var ReplaceStr = {
-	log: new SkinLog("ReplaceStr", SkinLogLvl.WARNING),
-	/**
-	 * 変換用データ(DB に格納する内部フォーマット)
-	 * @type {Array<string,number>}
-	 * @example
-	 * [
-	 *     [ 1, ""  ,""             ,"msg"  ,"gi" ,"ほげ" ,"ふが" ],
-	 *     [ 3, "0" ,"/software/"   ,"msg"  ,"g"  ,/foo/g ,"bar"  ],
-	 *     [ 4, "4" ,/\/software\// ,"date" ,"gi" ,"2008" ,"今年" ]
-	 * ]
-	 */
-	items_org: [],
-	/**
-	 * 変換用データ(対象 URL のみ抽出)
-	 * @type {Array<string,Array>}
-	 * @example
-	 * [
-	 *     ["msg"   ,[
-	 *                ["gi" ,"ほげ" ,"ふが" ],
-	 *                ["g"  ,/foo/g ,"bar"  ]
-	 *     ]],
-	 *     [ "date" ,[
-	 *                ["gi" ,"2008" ,"今年" ]
-	 *     ]]
-	 * ]
-	 */
-	items: [],
-	target_max: 0,
+class ReplaceStrManager {
+	constructor() {
+		this.log = new SkinLog("ReplaceStr", SkinLogLvl.WARNING);
+		/**
+		 * 変換用データ(DB に格納する内部フォーマット)
+		 * @type {Array<Array>}
+		 */
+		this.items_org = [];
+		/**
+		 * 変換用データ(対象 URL のみ抽出)
+		 * @type {Array<string, Array>}
+		 */
+		this.items = [];
+		this.target_max = 0;
+	}
+
 	/**
 	 * 変換用データを読み込み前に初期化します。
 	 */
-	init(){
+	init() {
 		this.items_org = [];
 		this.items = [];
-	},
+	}
+
 	/**
 	 * ReplaceStr.txtファイルの内容をパースして内部フォーマットにします。
-	 * @param {string}	text	ReplaceStr.txtファイルから読み込んだテキスト
-	 *
-	 * @see {@link http://janestyle.s11.xrea.com/help/first/ReplaceStr.html}
+	 * @param {string} text ReplaceStr.txtファイルから読み込んだテキスト
 	 */
-	parseRule(text){
-		const table = ReplaceStr.parseTabText(text);
-		for(let ary of table){
+	parseRule(text) {
+		const table = this.parseTabText(text);
+		for (const ary of table) {
 			try {
 				let [ , cmd_src, dst, target, url ] = ary;
 				let type = "";
 				let term = "";
 				let flags = "";
-				let   src;
+				let src;
 
 				// 置換対象
-				if(target !== "name" && target !== "mail" && target !== "date" && target !== "id"){
+				if (target !== "name" && target !== "mail" && target !== "date" && target !== "id") {
 					target = "msg";
 				}
 
 				// 置換対象の文字列
-				if(cmd_src.match(/^<([er])x(2?)>(.+)/)){
+				if (cmd_src.match(/^<([er])x(2?)>(.+)/)) {
 					const is_regex = (RegExp.$1 === "r");
 					flags = (RegExp.$2 === "2" ? "g" : "gi");
 					src = (is_regex ? RegExp.$3 : this.escape(RegExp.$3));
-				}else{
+				} else {
 					flags = "gi";
 					src = this.escape(cmd_src);
 				}
 				src = new RegExp(src, flags);
 
 				// <n>対象URL/タイトル
-				// 指定しない場合はすべてのスレッドが対象
-				if(url && url.match(/^(?:<(\d)>)?(.*)/)){
+				if (url && url.match(/^(?:<(\d)>)?(.*)/)) {
 					type = RegExp.$1 || "0";
 					url  = RegExp.$2 || "";
-					switch (type){
+					switch (type) {
 						case "0":
 						case "1":
 							term = new RegExp(this.escape(url));
@@ -8312,36 +8134,34 @@ var ReplaceStr = {
 					}
 				}
 				this.items_org.push([ type, term, target, flags, src, dst ]);
-			}
-			catch(e){
+			} catch (e) {
 				throw new Error(ary[0] + " 行目\n" + e.message);
 			}
 		}
-		// ソートしてからストレージに保存
-		ReplaceStr.items_org.sort((a, b) => {
-			if(a[3] === b[3]) return (a[0] > b[0]) ? 1 : -1;
+		// ソート
+		this.items_org.sort((a, b) => {
+			if (a[3] === b[3]) return (a[0] > b[0]) ? 1 : -1;
 			else              return (a[3] > b[3]) ? 1 : -1;
 		});
-	},
+	}
+
 	/**
 	 * タブ区切りの文字列をパースします。
-	 * @param {string} tabText	タブ区切りの文字列
+	 * @param {string} tabText タブ区切りの文字列
 	 */
-	parseTabText(tabText){
-		this.log.dbg("parseTabText(url,title,contextNode,popup)");
-
+	parseTabText(tabText) {
 		const lineData = tabText.split("\r\n");
 		const lines = lineData.length;
-		let table = [];
+		const table = [];
 		let idx = 0;
-		for(let i = 0; i < lines; i++){
+		for (let i = 0; i < lines; i++) {
 			const wCount = lineData[i].split("\t");
 			const cols = wCount.length;
-			if(cols === 3 || cols === 4){
-				if(!wCount[0].match(/^;|'|#|\/\//)){
+			if (cols === 3 || cols === 4) {
+				if (!wCount[0].match(/^;|'|#|\/\//)) {
 					table[idx] = [];
 					table[idx][0] = i + 1;
-					for(let j = 0; j < cols; j++){
+					for (let j = 0; j < cols; j++) {
 						table[idx][j + 1] = wCount[j];
 					}
 					idx++;
@@ -8349,42 +8169,38 @@ var ReplaceStr = {
 			}
 		}
 		return table;
-	},
-	/**
-	 * localStorage に変換のデータを eval() で評価できる形で保存します。
-	 */
-	save(){
-		this.log.dbg("save()");
+	}
 
-		// 正規表現を文字列化する
-		let temp = this.items_org.map(ary => ary.map(v => v instanceof RegExp ? v.source : v));
+	/**
+	 * localStorage に変換のデータを保存します。
+	 */
+	save() {
+		this.log.dbg("save()");
+		const temp = this.items_org.map(ary => ary.map(v => v instanceof RegExp ? v.source : v));
 		Storage.set("valueReplaceStr", JSON.stringify(temp));
-	},
-	/**
-	 */
-	escape(e){
+	}
+
+	escape(e) {
 		return e.replace(/[.*+?^=!:${}()|[\]\/\\]/g, '\\$&');
-	},
+	}
+
 	/**
-	 * 変換用データを読み込み eval() で評価します。結果は自動的に items プロパティに格納されます。
+	 * 変換用データを読み込みます。
 	 */
-	load(url, title){
+	load(url, title) {
 		this.log.dbg("load(" + url + ", " + title + ")");
 		const replaceStr = Storage.get("valueReplaceStr") || "[]";
 		this.items_org = JSON.parse(replaceStr);
 		const max = SkinPref.get("valueMaxReplaceStr");
 		this.target_max = (max > 1000 ? 1000 : (max < 0 ? 0 : max));
 
-		// とりあえずべたべたに(2)
 		this.items = [];
-		for(let ary of this.items_org){
+		for (const ary of this.items_org) {
 			const [ type, term, target, flags, src, dst ] = ary;
 			const re = new RegExp(term);
 			let use = true;
 
-			//  <0>:含む <1>:含まない <2>:一致 <3>:一致しない <4>:含む（正規） <5>:含まない（正規）
-			//  ※ <n>を指定しない場合は<0>が指定されたとみなす
-			switch (type){
+			switch (type) {
 				case "0":
 				case "2":
 				case "4":
@@ -8396,30 +8212,32 @@ var ReplaceStr = {
 					use = !re.test(url) && !re.test(title);
 					break;
 			}
-			if(use){
-				if(!this.items[target]){
+			if (use) {
+				if (!this.items[target]) {
 					this.items[target] = [];
 				}
 				this.items[target].push([ new RegExp(src, flags), dst ]);
 			}
 		}
-	},
+	}
+
 	/**
 	 * 変換用のデータを削除します。
 	 */
-	clear(){
+	clear() {
 		this.log.dbg("clear()");
 		Storage.remove("valueReplaceStr");
 		this.items_org = [];
 		this.items = [];
-	},
+	}
+
 	/**
 	 * 変換を実行します。
 	 */
-	replace(url, title, node){
+	replace(url, title, node) {
 		this.log.dbg("replace(url,title,node)");
 		this.load(url, title);
-		if(!this.items) return;
+		if (!this.items) return;
 
 		const xpaths = {
 			"name":	ResNodes.getNames.bind(ResNodes),
@@ -8434,20 +8252,24 @@ var ReplaceStr = {
 		const start = (num > this.target_max ? num - this.target_max : 0);
 		const last = num - 1;
 
-		for(let i = last; i >= start; i--){
-			for(let t in this.items){
+		for (let i = last; i >= start; i--) {
+			for (const t in this.items) {
 				const ary = this.items[t];
 				const cur_node = xpaths[t](resItems[i])[0];
+				if (!cur_node) continue;
+
 				const org_str = cur_node.innerHTML;
 				let tmp_str = org_str;
-				for(let line of ary){
+				for (const line of ary) {
 					tmp_str = tmp_str.replace(...line);
 				}
-				if(org_str !== tmp_str) cur_node.innerHTML = tmp_str;
+				if (org_str !== tmp_str) cur_node.innerHTML = tmp_str;
 			}
 		}
 	}
-};
+}
+// グローバル変数名へのマッピング
+var ReplaceStr = new ReplaceStrManager();
 
 //======================================
 // あぼーん関連
@@ -8469,7 +8291,8 @@ class b2rAboneHandlerManager {
 		_doc.addEventListener("chaika-abone-add", this, false);
 		_doc.addEventListener("chaika-abone-remove", this, false);
 	}
-	/**
+
+  /**
 	 * あぼーん追加/削除時のイベントを処理します。
 	 */
 	handleEvent(aEvent){
@@ -8482,6 +8305,9 @@ class b2rAboneHandlerManager {
 				const res = ResNodes.getParentContainer(node);
 				const is_hide = res.getAttribute("concealed");
 				res.setAttribute("concealed", is_hide === "true" ? "false" : "true");
+
+				// あぼーん状態が切り替わったため、キャッシュをクリア
+				ResNodes.clearCache();
 			}
 		}else{
 			const isAdd = (aEvent.type === "chaika-abone-add");
@@ -8512,8 +8338,12 @@ class b2rAboneHandlerManager {
 					}
 				}
 			});
+
+			// あぼーんの追加/削除処理が走ったため、キャッシュをクリア
+			ResNodes.clearCache();
 		}
 	}
+
 	/**
 	 * あぼーんの設定変更を反映させるためスレッドをリロードします。
 	 */

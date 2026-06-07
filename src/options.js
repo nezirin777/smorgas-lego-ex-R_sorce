@@ -734,14 +734,27 @@ var SkinPref = new SkinPrefManager();
 SkinPref.init();
 SkinPref.load();
 
-// スタイル設定読込の<link>タグ書出し
+// スタイル設定読込の<link>タグを安全にDOMへ追加 (非推奨のdocument.writelnを完全に排除)
 (() => {
 	const SKIN_PATH = location.href.replace(/\/thread\/.+$/, "/skin/");
 	const SKIN_NAME = "style-" + SkinPref.get("nameSkinStyle") + ".css";
-	document.writeln('<link rel="stylesheet" type="text/css" id="commonstyle" href="' + SKIN_PATH  + 'style-common.css" />');
-	if(SkinPref.get("enableLinkTypeIcon")){
-		document.writeln('<link rel="stylesheet" type="text/css" id="outlinkstyle" href="' + SKIN_PATH  + 'style-outlink.css" />');
+
+	const createLink = (id, href) => {
+		const link = document.createElement("link");
+		link.rel = "stylesheet";
+		link.type = "text/css";
+		link.id = id;
+		link.href = href;
+		return link;
+	};
+
+	const head = document.head || document.getElementsByTagName("head")[0];
+	if (head) {
+		head.appendChild(createLink("commonstyle", SKIN_PATH + "style-common.css"));
+		if (SkinPref.get("enableLinkTypeIcon")) {
+			head.appendChild(createLink("outlinkstyle", SKIN_PATH + "style-outlink.css"));
+		}
+		head.appendChild(createLink("skinstyle", SKIN_PATH + SKIN_NAME));
+		head.appendChild(createLink("mystyle", SKIN_PATH + "style-my.css"));
 	}
-	document.writeln('<link rel="stylesheet" type="text/css" id="skinstyle" href="' + SKIN_PATH + SKIN_NAME + '" />');
-	document.writeln('<link rel="stylesheet" type="text/css" id="mystyle" href="' + SKIN_PATH + 'style-my.css" />');
 })();
